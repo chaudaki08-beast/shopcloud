@@ -1,32 +1,26 @@
-import * as net from 'net';
+import { prisma } from '@shopcloud/database';
 
-let dbHealthy = false;
+let dbHealthy: boolean | null = null;
 let lastChecked = 0;
-const CHECK_INTERVAL_MS = 30000;
+const CHECK_INTERVAL_MS = 60000; // 60s cache
 
 export async function isDatabaseOnline(): Promise<boolean> {
   const now = Date.now();
-  if (now - lastChecked < CHECK_INTERVAL_MS) {
+  if (dbHealthy !== null && now - lastChecked < CHECK_INTERVAL_MS) {
     return dbHealthy;
   }
   lastChecked = now;
 
-  return new Promise((resolve) => {
-    const socket = net.createConnection({ port: 5432, host: '127.0.0.1', timeout: 80 });
-    socket.on('connect', () => {
-      socket.destroy();
-      dbHealthy = true;
-      resolve(true);
-    });
-    socket.on('error', () => {
-      socket.destroy();
-      dbHealthy = false;
-      resolve(false);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      dbHealthy = false;
-      resolve(false);
-    });
-  });
+  try {
+    const ping = prisma.$queryRaw`SELECT 1`;
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('DB connection timeout')), 400),
+    );
+    await Promise.race([ping, timeout]);
+    dbHealthy = true;
+    return true;
+  } catch {
+    dbHealthy = false;
+    return false;
+  }
 }
