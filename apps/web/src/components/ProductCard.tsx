@@ -77,11 +77,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart }
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
           <div>
             <div className="text-lg font-bold text-slate-900">
-              ₹{finalPrice.toLocaleString('en-IN')}
+              ₹{Math.round(finalPrice).toLocaleString('en-IN')}
             </div>
             {product.discountPercentage > 0 && (
               <div className="text-xs text-slate-400 line-through">
-                ₹{originalPrice.toLocaleString('en-IN')}
+                ₹{Math.round(originalPrice).toLocaleString('en-IN')}
               </div>
             )}
           </div>
