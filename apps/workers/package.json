@@ -1,0 +1,21 @@
+{
+  "name": "@shopcloud/workers",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.7.1",
+    "@google-cloud/storage": "^7.12.1",
+    "@shopcloud/contracts": "*",
+    "@shopcloud/database": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}

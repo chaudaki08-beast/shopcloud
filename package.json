@@ -1,0 +1,21 @@
+{
+  "name": "shopcloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-Style, Event-Driven E-Commerce Platform on Google Cloud Platform (GCP)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:workers": "npm run dev --workspace=apps/workers",
+    "build": "npm run --workspaces --if-present build",
+    "test": "npm run --workspaces --if-present test",
+    "lint": "npm run --workspaces --if-present lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,7 @@
+project_id          = "your-gcp-project-id"
+project_name        = "shopcloud"
+environment         = "dev"
+region              = "asia-south1"
+db_password         = "ChangeMeSecurePassword123!"
+api_container_image = "asia-south1-docker.pkg.dev/your-gcp-project-id/shopcloud/api:latest"
+alert_email         = "your-email@example.com"

@@ -1,0 +1,40 @@
+name: ShopCloud CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Lint, Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Contracts
+        run: npm run build --workspace=@shopcloud/contracts
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=./packages/database/prisma/schema.prisma
+
+      - name: Build Backend API
+        run: npm run build --workspace=@shopcloud/api
+
+      - name: Build Workers
+        run: npm run build --workspace=@shopcloud/workers
+
+      - name: Build Web Frontend
+        run: npm run build --workspace=@shopcloud/web

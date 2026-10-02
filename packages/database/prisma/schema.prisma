@@ -1,0 +1,244 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  STORE_ADMIN
+  INVENTORY_MANAGER
+  CUSTOMER_SUPPORT
+  CUSTOMER
+}
+
+enum OrderStatus {
+  CART
+  CHECKOUT
+  PAYMENT_PENDING
+  PAYMENT_SUCCESS
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURN_APPROVED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role        @default(CUSTOMER)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  cart         Cart?
+  orders       Order[]
+  payments     Payment[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Category {
+  id          String     @id @default(uuid())
+  name        String
+  slug        String     @unique
+  description String?
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([slug])
+}
+
+model Product {
+  id                 String              @id @default(uuid())
+  name               String
+  slug               String              @unique
+  sku                String              @unique
+  description        String
+  price              Int                 // in paise / cents (e.g. 7999900 for ₹79,999.00)
+  discountPercentage Int                 @default(0)
+  stock              Int                 @default(0)
+  categoryId         String
+  category           Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  isActive           Boolean             @default(true)
+  attributes         Json                @default("{}")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  images             ProductImage[]
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([sku])
+  @@index([price])
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+  altText   String?
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model InventoryMovement {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  changeQuantity Int      // e.g. -1 for reservation, +1 for release/restock
+  previousStock  Int
+  newStock       Int
+  reason         String   // ORDER_RESERVED, PAYMENT_FAILED_RELEASE, RESTOCK
+  referenceId    String?  // orderId
+  createdAt      DateTime @default(now())
+
+  @@index([productId])
+  @@index([referenceId])
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status          OrderStatus @default(PAYMENT_PENDING)
+  subtotal        Int
+  discountTotal   Int         @default(0)
+  taxTotal        Int         @default(0)
+  shippingFee     Int         @default(0)
+  grandTotal      Int
+  currency        String      @default("INR")
+  shippingAddress Json
+  paymentId       String?
+  trackingNumber  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           OrderItem[]
+  payments        Payment[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName    String
+  sku            String
+  quantity       Int
+  unitPrice      Int
+  discountAmount Int      @default(0)
+  lineTotal      Int
+  createdAt      DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  amount         Int
+  currency       String        @default("INR")
+  status         PaymentStatus @default(PENDING)
+  provider       String        // STRIPE_SANDBOX, RAZORPAY_SANDBOX
+  transactionRef String?
+  idempotencyKey String        @unique
+  payload        Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([orderId])
+  @@index([idempotencyKey])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entity      String
+  entityId    String
+  action      String
+  performedBy String?
+  user        User?    @relation(fields: [performedBy], references: [id], onDelete: SetNull)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([performedBy])
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  recipientEmail String
+  recipientName  String
+  template       String
+  status         String   @default("SENT")
+  variables      Json     @default("{}")
+  orderId        String?
+  createdAt      DateTime @default(now())
+
+  @@index([recipientEmail])
+  @@index([orderId])
+}
