@@ -8,6 +8,7 @@ import {
   ProductDto,
   CategoryDto,
 } from '@shopcloud/contracts';
+import { isDatabaseOnline } from '../../db-status';
 
 const DEFAULT_CATEGORIES: CategoryDto[] = [
   {
@@ -166,65 +167,67 @@ export class ProductsService {
     const limit = Math.max(1, Math.min(50, Number(query.limit) || 12));
     const skip = (page - 1) * limit;
 
-    try {
-      const where: Prisma.ProductWhereInput = {
-        isActive: true,
-      };
-
-      if (query.categorySlug) {
-        where.category = {
-          slug: query.categorySlug,
+    if (await isDatabaseOnline()) {
+      try {
+        const where: Prisma.ProductWhereInput = {
+          isActive: true,
         };
+
+        if (query.categorySlug) {
+          where.category = {
+            slug: query.categorySlug,
+          };
+        }
+
+        if (query.search) {
+          where.OR = [
+            { name: { contains: query.search, mode: 'insensitive' } },
+            { description: { contains: query.search, mode: 'insensitive' } },
+            { sku: { contains: query.search, mode: 'insensitive' } },
+          ];
+        }
+
+        if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+          where.price = {};
+          if (query.minPrice !== undefined) where.price.gte = Number(query.minPrice);
+          if (query.maxPrice !== undefined) where.price.lte = Number(query.maxPrice);
+        }
+
+        if (query.inStockOnly) {
+          where.stock = { gt: 0 };
+        }
+
+        let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' };
+        if (query.sortBy === 'price_asc') orderBy = { price: 'asc' };
+        if (query.sortBy === 'price_desc') orderBy = { price: 'desc' };
+        if (query.sortBy === 'name_asc') orderBy = { name: 'asc' };
+
+        const [products, total] = await Promise.all([
+          prisma.product.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy,
+            include: {
+              category: true,
+              images: true,
+            },
+          }),
+          prisma.product.count({ where }),
+        ]);
+
+        if (products && products.length > 0) {
+          return {
+            data: products.map((p) => this.formatProduct(p)),
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          };
+        }
+      } catch {
+        // Fallback to default catalog if database is not yet seeded or offline
       }
-
-      if (query.search) {
-        where.OR = [
-          { name: { contains: query.search, mode: 'insensitive' } },
-          { description: { contains: query.search, mode: 'insensitive' } },
-          { sku: { contains: query.search, mode: 'insensitive' } },
-        ];
-      }
-
-      if (query.minPrice !== undefined || query.maxPrice !== undefined) {
-        where.price = {};
-        if (query.minPrice !== undefined) where.price.gte = Number(query.minPrice);
-        if (query.maxPrice !== undefined) where.price.lte = Number(query.maxPrice);
-      }
-
-      if (query.inStockOnly) {
-        where.stock = { gt: 0 };
-      }
-
-      let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' };
-      if (query.sortBy === 'price_asc') orderBy = { price: 'asc' };
-      if (query.sortBy === 'price_desc') orderBy = { price: 'desc' };
-      if (query.sortBy === 'name_asc') orderBy = { name: 'asc' };
-
-      const [products, total] = await Promise.all([
-        prisma.product.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy,
-          include: {
-            category: true,
-            images: true,
-          },
-        }),
-        prisma.product.count({ where }),
-      ]);
-
-      if (products && products.length > 0) {
-        return {
-          data: products.map((p) => this.formatProduct(p)),
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        };
-      }
-    } catch {
-      // Fallback to default catalog if database is not yet seeded or offline
     }
 
     // Fallback seed catalog filter
@@ -255,20 +258,22 @@ export class ProductsService {
   }
 
   async findBySlug(slug: string): Promise<ProductDto> {
-    try {
-      const product = await prisma.product.findUnique({
-        where: { slug },
-        include: {
-          category: true,
-          images: true,
-        },
-      });
+    if (await isDatabaseOnline()) {
+      try {
+        const product = await prisma.product.findUnique({
+          where: { slug },
+          include: {
+            category: true,
+            images: true,
+          },
+        });
 
-      if (product) {
-        return this.formatProduct(product);
+        if (product) {
+          return this.formatProduct(product);
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      // fallback
     }
 
     const fallback = DEFAULT_PRODUCTS.find((p) => p.slug === slug);
@@ -280,23 +285,25 @@ export class ProductsService {
   }
 
   async getCategories(): Promise<CategoryDto[]> {
-    try {
-      const categories = await prisma.category.findMany({
-        orderBy: { name: 'asc' },
-      });
-      if (categories && categories.length > 0) {
-        return categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          slug: c.slug,
-          description: c.description || undefined,
-          parentId: c.parentId,
-          createdAt: c.createdAt.toISOString(),
-          updatedAt: c.updatedAt.toISOString(),
-        }));
+    if (await isDatabaseOnline()) {
+      try {
+        const categories = await prisma.category.findMany({
+          orderBy: { name: 'asc' },
+        });
+        if (categories && categories.length > 0) {
+          return categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            description: c.description || undefined,
+            parentId: c.parentId,
+            createdAt: c.createdAt.toISOString(),
+            updatedAt: c.updatedAt.toISOString(),
+          }));
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      // fallback
     }
 
     return DEFAULT_CATEGORIES;
