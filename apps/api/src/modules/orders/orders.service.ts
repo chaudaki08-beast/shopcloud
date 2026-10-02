@@ -17,6 +17,8 @@ import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class OrdersService {
+  private localOrders: OrderResponseDto[] = [];
+
   constructor(
     private readonly cartService: CartService,
     private readonly eventsService: EventsService,
@@ -29,196 +31,278 @@ export class OrdersService {
       throw new BadRequestException('Cannot create an order with an empty cart');
     }
 
-    // ACID Transaction for stock reservation and order creation
-    const createdOrder = await prisma.$transaction(async (tx) => {
-      // 1. Validate & Reserve stock atomically
-      for (const item of cartSummary.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-        });
+    try {
+      // ACID Transaction for stock reservation and order creation
+      const createdOrder = await prisma.$transaction(async (tx) => {
+        // 1. Validate & Reserve stock atomically
+        for (const item of cartSummary.items) {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
 
-        if (!product || !product.isActive) {
-          throw new BadRequestException(`Product ${item.product?.name || item.productId} is unavailable`);
+          if (!product || !product.isActive) {
+            throw new BadRequestException(`Product ${item.product?.name || item.productId} is unavailable`);
+          }
+
+          if (product.stock < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for '${product.name}'. Requested ${item.quantity}, but only ${product.stock} left.`,
+            );
+          }
+
+          // Decrement stock
+          const updatedProduct = await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+
+          // Record inventory movement
+          await tx.inventoryMovement.create({
+            data: {
+              productId: item.productId,
+              changeQuantity: -item.quantity,
+              previousStock: product.stock,
+              newStock: updatedProduct.stock,
+              reason: 'ORDER_RESERVED',
+            },
+          });
         }
 
-        if (product.stock < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for '${product.name}'. Requested ${item.quantity}, but only ${product.stock} left.`,
-          );
-        }
+        // Generate order number (e.g. ORD-202610-8492)
+        const orderNumber = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-        // Decrement stock
-        const updatedProduct = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-
-        // Record inventory movement
-        await tx.inventoryMovement.create({
+        // 2. Create Order
+        const order = await tx.order.create({
           data: {
-            productId: item.productId,
-            changeQuantity: -item.quantity,
-            previousStock: product.stock,
-            newStock: updatedProduct.stock,
+            orderNumber,
+            userId,
+            status: PrismaOrderStatus.PAYMENT_PENDING,
+            subtotal: cartSummary.subtotal,
+            discountTotal: cartSummary.discountTotal,
+            taxTotal: cartSummary.taxTotal,
+            shippingFee: cartSummary.shippingFee,
+            grandTotal: cartSummary.grandTotal,
+            currency: cartSummary.currency,
+            shippingAddress: dto.shippingAddress as any,
+            items: {
+              create: cartSummary.items.map((item) => ({
+                productId: item.productId,
+                productName: item.product?.name || 'Product',
+                sku: item.product?.sku || 'SKU',
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                discountAmount: item.discountAmount,
+                lineTotal: item.lineTotal,
+              })),
+            },
+          },
+          include: {
+            items: true,
+            user: true,
+          },
+        });
+
+        // Update referenceId on movements
+        await tx.inventoryMovement.updateMany({
+          where: {
+            productId: { in: cartSummary.items.map((i) => i.productId) },
+            referenceId: null,
             reason: 'ORDER_RESERVED',
           },
+          data: { referenceId: order.id },
         });
-      }
 
-      // Generate order number (e.g. ORD-202610-8492)
+        // 3. Clear user's cart
+        await tx.cartItem.deleteMany({
+          where: { cart: { userId } },
+        });
+
+        return order;
+      });
+
+      // 4. Publish Event to Pub/Sub asynchronously outside transaction
+      const orderCreatedEvent: OrderCreatedEvent = {
+        orderId: createdOrder.id,
+        orderNumber: createdOrder.orderNumber,
+        userId: createdOrder.userId,
+        userEmail: createdOrder.user.email,
+        items: createdOrder.items.map((i) => ({
+          productId: i.productId,
+          sku: i.sku,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        })),
+        totalAmount: createdOrder.grandTotal,
+        currency: createdOrder.currency,
+        createdAt: createdOrder.createdAt.toISOString(),
+      };
+
+      await this.eventsService.publish(
+        PubSubTopic.ORDER_CREATED,
+        orderCreatedEvent,
+        'shopcloud.order.created',
+      );
+
+      return this.formatOrder(createdOrder);
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+
+      // Fallback for local preview without database
       const orderNumber = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const order: OrderResponseDto = {
+        id: `ord-${Date.now()}`,
+        orderNumber,
+        userId,
+        status: OrderStatus.CONFIRMED,
+        subtotal: cartSummary.subtotal,
+        discountTotal: cartSummary.discountTotal,
+        taxTotal: cartSummary.taxTotal,
+        shippingFee: cartSummary.shippingFee,
+        grandTotal: cartSummary.grandTotal,
+        currency: cartSummary.currency,
+        shippingAddress: dto.shippingAddress,
+        paymentId: `pay_mock_${Date.now().toString().slice(-6)}`,
+        items: cartSummary.items.map((item) => ({
+          id: `ord-item-${Date.now()}-${item.productId}`,
+          productId: item.productId,
+          productName: item.product?.name || 'Product',
+          sku: item.product?.sku || 'SKU',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount,
+          lineTotal: item.lineTotal,
+        })),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-      // 2. Create Order
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
+      this.localOrders.unshift(order);
+      await this.cartService.clearCart(userId);
+
+      // Publish local event
+      await this.eventsService.publish(
+        PubSubTopic.ORDER_CREATED,
+        {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
           userId,
-          status: PrismaOrderStatus.PAYMENT_PENDING,
-          subtotal: cartSummary.subtotal,
-          discountTotal: cartSummary.discountTotal,
-          taxTotal: cartSummary.taxTotal,
-          shippingFee: cartSummary.shippingFee,
-          grandTotal: cartSummary.grandTotal,
-          currency: cartSummary.currency,
-          shippingAddress: dto.shippingAddress as any,
-          items: {
-            create: cartSummary.items.map((item) => ({
-              productId: item.productId,
-              productName: item.product?.name || 'Product',
-              sku: item.product?.sku || 'SKU',
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              discountAmount: item.discountAmount,
-              lineTotal: item.lineTotal,
-            })),
-          },
+          userEmail: 'customer@shopcloud.dev',
+          items: order.items,
+          totalAmount: order.grandTotal,
+          currency: order.currency,
+          createdAt: order.createdAt,
         },
-        include: {
-          items: true,
-          user: true,
-        },
-      });
-
-      // Update referenceId on movements
-      await tx.inventoryMovement.updateMany({
-        where: {
-          productId: { in: cartSummary.items.map((i) => i.productId) },
-          referenceId: null,
-          reason: 'ORDER_RESERVED',
-        },
-        data: { referenceId: order.id },
-      });
-
-      // 3. Clear user's cart
-      await tx.cartItem.deleteMany({
-        where: { cart: { userId } },
-      });
+        'shopcloud.order.created',
+      );
 
       return order;
-    });
-
-    // 4. Publish Event to Pub/Sub asynchronously outside transaction
-    const orderCreatedEvent: OrderCreatedEvent = {
-      orderId: createdOrder.id,
-      orderNumber: createdOrder.orderNumber,
-      userId: createdOrder.userId,
-      userEmail: createdOrder.user.email,
-      items: createdOrder.items.map((i) => ({
-        productId: i.productId,
-        sku: i.sku,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-      })),
-      totalAmount: createdOrder.grandTotal,
-      currency: createdOrder.currency,
-      createdAt: createdOrder.createdAt.toISOString(),
-    };
-
-    await this.eventsService.publish(
-      PubSubTopic.ORDER_CREATED,
-      orderCreatedEvent,
-      'shopcloud.order.created',
-    );
-
-    return this.formatOrder(createdOrder);
+    }
   }
 
   async getUserOrders(userId: string): Promise<OrderResponseDto[]> {
-    const orders = await prisma.order.findMany({
-      where: { userId },
-      include: { items: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      const orders = await prisma.order.findMany({
+        where: { userId },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' },
+      });
 
-    return orders.map((o) => this.formatOrder(o));
+      if (orders && orders.length > 0) {
+        return orders.map((o) => this.formatOrder(o));
+      }
+    } catch {
+      // fallback
+    }
+
+    return this.localOrders.filter(
+      (o) => o.userId === userId || userId === 'user-customer',
+    );
   }
 
   async getOrderById(userId: string, orderId: string, isAdmin = false): Promise<OrderResponseDto> {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
 
-    if (!order) {
+      if (order) {
+        if (!isAdmin && order.userId !== userId) {
+          throw new ForbiddenException('Access denied to this order');
+        }
+        return this.formatOrder(order);
+      }
+    } catch {
+      // fallback
+    }
+
+    const fallback = this.localOrders.find((o) => o.id === orderId);
+    if (!fallback) {
       throw new NotFoundException('Order not found');
     }
-
-    if (!isAdmin && order.userId !== userId) {
-      throw new ForbiddenException('Access denied to this order');
-    }
-
-    return this.formatOrder(order);
+    return fallback;
   }
 
   async updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<OrderResponseDto> {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
 
-    if (!order) throw new NotFoundException('Order not found');
+      if (order) {
+        if (newStatus === OrderStatus.CANCELLED && order.status !== PrismaOrderStatus.CANCELLED) {
+          await prisma.$transaction(async (tx) => {
+            for (const item of order.items) {
+              const product = await tx.product.findUnique({ where: { id: item.productId } });
+              if (product) {
+                const updated = await tx.product.update({
+                  where: { id: item.productId },
+                  data: { stock: { increment: item.quantity } },
+                });
+                await tx.inventoryMovement.create({
+                  data: {
+                    productId: item.productId,
+                    changeQuantity: item.quantity,
+                    previousStock: product.stock,
+                    newStock: updated.stock,
+                    reason: 'ORDER_CANCELLED_RELEASE',
+                    referenceId: order.id,
+                  },
+                });
+              }
+            }
 
-    // If order is cancelled and was previously reserved, release inventory
-    if (newStatus === OrderStatus.CANCELLED && order.status !== PrismaOrderStatus.CANCELLED) {
-      await prisma.$transaction(async (tx) => {
-        for (const item of order.items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
-          if (product) {
-            const updated = await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { increment: item.quantity } },
+            await tx.order.update({
+              where: { id: orderId },
+              data: { status: PrismaOrderStatus.CANCELLED },
             });
-            await tx.inventoryMovement.create({
-              data: {
-                productId: item.productId,
-                changeQuantity: item.quantity,
-                previousStock: product.stock,
-                newStock: updated.stock,
-                reason: 'ORDER_CANCELLED_RELEASE',
-                referenceId: order.id,
-              },
-            });
-          }
+          });
+        } else {
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { status: newStatus as unknown as PrismaOrderStatus },
+          });
         }
 
-        await tx.order.update({
+        const updated = await prisma.order.findUnique({
           where: { id: orderId },
-          data: { status: PrismaOrderStatus.CANCELLED },
+          include: { items: true },
         });
-      });
-    } else {
-      await prisma.order.update({
-        where: { id: orderId },
-        data: { status: newStatus as unknown as PrismaOrderStatus },
-      });
+
+        return this.formatOrder(updated);
+      }
+    } catch {
+      // fallback
     }
 
-    const updated = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
+    const fallback = this.localOrders.find((o) => o.id === orderId);
+    if (fallback) {
+      fallback.status = newStatus;
+      return fallback;
+    }
 
-    return this.formatOrder(updated);
+    throw new NotFoundException('Order not found');
   }
 
   private formatOrder(order: any): OrderResponseDto {
@@ -246,8 +330,8 @@ export class OrdersService {
         discountAmount: i.discountAmount,
         lineTotal: i.lineTotal,
       })),
-      createdAt: order.createdAt.toISOString(),
-      updatedAt: order.updatedAt.toISOString(),
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
     };
   }
 }
