@@ -1,20 +1,46 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { PermissionsService } from './permissions.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
+import { AuthRateLimiterGuard } from './guards/auth-rate-limiter.guard';
 
+@Global()
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'shopcloud-default-secret-change-me',
-      signOptions: { expiresIn: '7d' },
+      secret:
+        process.env.JWT_ACCESS_SECRET ||
+        process.env.JWT_SECRET ||
+        'shopcloud-default-secret-change-me',
+      signOptions: { expiresIn: '15m' },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtModule, PassportModule],
+  providers: [
+    AuthService,
+    PermissionsService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    PermissionsGuard,
+    AuthRateLimiterGuard,
+  ],
+  exports: [
+    AuthService,
+    PermissionsService,
+    JwtModule,
+    PassportModule,
+    JwtAuthGuard,
+    RolesGuard,
+    PermissionsGuard,
+    AuthRateLimiterGuard,
+  ],
 })
 export class AuthModule {}

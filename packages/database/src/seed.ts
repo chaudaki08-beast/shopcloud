@@ -58,7 +58,90 @@ async function main() {
     console.log(`  📁 Category ready: ${record.name} (${record.slug})`);
   }
 
-  // 2. Seed Clearly-Labeled Development Users
+  // 2. Seed Permissions & Role Mappings
+  const permissionsList = [
+    { name: 'products:read', description: 'View products and catalog items' },
+    { name: 'products:create', description: 'Create new catalog products' },
+    { name: 'products:update', description: 'Update products and specifications' },
+    { name: 'products:delete', description: 'Delete catalog products' },
+    { name: 'categories:read', description: 'View categories' },
+    { name: 'categories:create', description: 'Create new categories' },
+    { name: 'categories:update', description: 'Update existing categories' },
+    { name: 'categories:delete', description: 'Delete categories' },
+    { name: 'cart:read', description: 'View shopping cart items' },
+    { name: 'cart:update', description: 'Add, update or clear cart items' },
+    { name: 'orders:read', description: 'View placed orders' },
+    { name: 'orders:create', description: 'Place new orders' },
+    { name: 'orders:update', description: 'Update order status and logistics' },
+    { name: 'orders:cancel', description: 'Cancel active orders' },
+    { name: 'inventory:read', description: 'View stock levels and movements' },
+    { name: 'inventory:update', description: 'Adjust inventory stock' },
+    { name: 'users:read', description: 'View user profiles' },
+    { name: 'users:update', description: 'Update user profiles' },
+    { name: 'admin:manage', description: 'Full administrative access' },
+  ];
+
+  const seededPermissions: Record<string, string> = {};
+  for (const perm of permissionsList) {
+    const record = await prisma.permission.upsert({
+      where: { name: perm.name },
+      update: { description: perm.description },
+      create: perm,
+    });
+    seededPermissions[perm.name] = record.id;
+  }
+  console.log(`  🔑 Seeded ${Object.keys(seededPermissions).length} fine-grained permissions`);
+
+  // Map permissions to roles
+  const rolePermissionsMap: Record<string, string[]> = {
+    SUPER_ADMIN: permissionsList.map((p) => p.name),
+    STORE_ADMIN: [
+      'products:read', 'products:create', 'products:update', 'products:delete',
+      'categories:read', 'categories:create', 'categories:update', 'categories:delete',
+      'orders:read', 'orders:update', 'orders:cancel',
+      'inventory:read', 'inventory:update',
+      'users:read', 'admin:manage',
+    ],
+    INVENTORY_MANAGER: [
+      'products:read', 'categories:read',
+      'inventory:read', 'inventory:update',
+      'orders:read',
+    ],
+    CUSTOMER: [
+      'products:read', 'categories:read',
+      'cart:read', 'cart:update',
+      'orders:read', 'orders:create', 'orders:cancel',
+    ],
+    CUSTOMER_SUPPORT: [
+      'products:read', 'categories:read',
+      'orders:read', 'orders:cancel',
+      'users:read',
+    ],
+  };
+
+  for (const [role, perms] of Object.entries(rolePermissionsMap)) {
+    for (const permName of perms) {
+      const permId = seededPermissions[permName];
+      if (permId) {
+        await prisma.rolePermission.upsert({
+          where: {
+            role_permissionId: {
+              role: role as any,
+              permissionId: permId,
+            },
+          },
+          update: {},
+          create: {
+            role: role as any,
+            permissionId: permId,
+          },
+        });
+      }
+    }
+  }
+  console.log('  🛡️ Role-Permission matrices linked successfully');
+
+  // 3. Seed Clearly-Labeled Development Users
   // Standard development hash for "Password123!"
   const devPasswordHash = '$2b$10$wK1RkM1P0qO5Uo.9y7k1/uS0f76sD2b.JzI9e/s49c81p0d3iJ4w2';
 
@@ -70,6 +153,7 @@ async function main() {
       firstName: 'Cloud',
       lastName: 'Admin',
       role: 'SUPER_ADMIN' as const,
+      status: 'ACTIVE' as const,
     },
     {
       id: 'usr-customer-demo',
@@ -78,6 +162,7 @@ async function main() {
       firstName: 'Ganesh',
       lastName: 'Patil',
       role: 'CUSTOMER' as const,
+      status: 'ACTIVE' as const,
     },
     {
       id: 'usr-inventory-demo',
@@ -86,6 +171,16 @@ async function main() {
       firstName: 'Stock',
       lastName: 'Manager',
       role: 'INVENTORY_MANAGER' as const,
+      status: 'ACTIVE' as const,
+    },
+    {
+      id: 'usr-disabled-demo',
+      email: 'disabled@shopcloud.dev',
+      passwordHash: devPasswordHash,
+      firstName: 'Disabled',
+      lastName: 'User',
+      role: 'CUSTOMER' as const,
+      status: 'DISABLED' as const,
     },
   ];
 
@@ -96,10 +191,11 @@ async function main() {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        status: user.status,
       },
       create: user,
     });
-    console.log(`  👤 Dev User ready: ${user.email} [${user.role}]`);
+    console.log(`  👤 Dev User ready: ${user.email} [${user.role} - ${user.status}]`);
   }
 
   // 3. Seed Realistic Products across Categories

@@ -114,53 +114,55 @@ export class CartService {
 
     if (await isDatabaseOnline()) {
       try {
-        const product = await prisma.product.findUnique({ where: { id: productId } });
-        if (!product) {
-          throw new NotFoundException(`Product '${productId}' not found`);
-        }
-        if (!product.isActive) {
-          throw new BadRequestException(`Product '${product.name}' is inactive and unavailable`);
-        }
-
-        let cart = await prisma.cart.findUnique({ where: { userId } });
-        if (!cart) {
-          cart = await prisma.cart.create({ data: { userId } });
-        }
-
-        const existingItem = await prisma.cartItem.findUnique({
-          where: {
-            cartId_productId: {
-              cartId: cart.id,
-              productId,
-            },
-          },
+        const product = await prisma.product.findFirst({
+          where: { OR: [{ id: productId }, { slug: productId }] },
         });
 
-        const targetQuantity = existingItem ? existingItem.quantity + quantity : quantity;
-        if (product.stock < targetQuantity) {
-          throw new BadRequestException(
-            `Insufficient stock: Only ${product.stock} available for '${product.name}'`,
-          );
-        }
+        if (product) {
+          if (!product.isActive) {
+            throw new BadRequestException(`Product '${product.name}' is inactive and unavailable`);
+          }
 
-        if (existingItem) {
-          await prisma.cartItem.update({
-            where: { id: existingItem.id },
-            data: { quantity: targetQuantity },
-          });
-        } else {
-          await prisma.cartItem.create({
-            data: {
-              cartId: cart.id,
-              productId,
-              quantity,
+          let cart = await prisma.cart.findUnique({ where: { userId } });
+          if (!cart) {
+            cart = await prisma.cart.create({ data: { userId } });
+          }
+
+          const existingItem = await prisma.cartItem.findUnique({
+            where: {
+              cartId_productId: {
+                cartId: cart.id,
+                productId: product.id,
+              },
             },
           });
-        }
 
-        return this.getCart(userId);
+          const targetQuantity = existingItem ? existingItem.quantity + quantity : quantity;
+          if (product.stock < targetQuantity) {
+            throw new BadRequestException(
+              `Insufficient stock: Only ${product.stock} available for '${product.name}'`,
+            );
+          }
+
+          if (existingItem) {
+            await prisma.cartItem.update({
+              where: { id: existingItem.id },
+              data: { quantity: targetQuantity },
+            });
+          } else {
+            await prisma.cartItem.create({
+              data: {
+                cartId: cart.id,
+                productId: product.id,
+                quantity,
+              },
+            });
+          }
+
+          return this.getCart(userId);
+        }
       } catch (err) {
-        if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+        if (err instanceof BadRequestException) throw err;
       }
     }
 
@@ -204,37 +206,36 @@ export class CartService {
 
     if (await isDatabaseOnline()) {
       try {
-        const product = await prisma.product.findUnique({ where: { id: productId } });
-        if (!product) {
-          throw new NotFoundException(`Product '${productId}' not found`);
-        }
-        if (!product.isActive) {
-          throw new BadRequestException(`Product '${product.name}' is inactive`);
-        }
-        if (product.stock < quantity) {
-          throw new BadRequestException(
-            `Insufficient stock: Only ${product.stock} available for '${product.name}'`,
-          );
-        }
-
-        const cart = await prisma.cart.findUnique({ where: { userId } });
-        if (!cart) throw new NotFoundException('Cart not found');
-
-        const existingItem = await prisma.cartItem.findUnique({
-          where: { cartId_productId: { cartId: cart.id, productId } },
-        });
-        if (!existingItem) {
-          throw new NotFoundException(`Product '${productId}' is not in the cart`);
-        }
-
-        await prisma.cartItem.update({
-          where: { id: existingItem.id },
-          data: { quantity },
+        const product = await prisma.product.findFirst({
+          where: { OR: [{ id: productId }, { slug: productId }] },
         });
 
-        return this.getCart(userId);
+        if (product) {
+          if (!product.isActive) {
+            throw new BadRequestException(`Product '${product.name}' is inactive`);
+          }
+          if (product.stock < quantity) {
+            throw new BadRequestException(
+              `Insufficient stock: Only ${product.stock} available for '${product.name}'`,
+            );
+          }
+
+          const cart = await prisma.cart.findUnique({ where: { userId } });
+          if (cart) {
+            const existingItem = await prisma.cartItem.findUnique({
+              where: { cartId_productId: { cartId: cart.id, productId: product.id } },
+            });
+            if (existingItem) {
+              await prisma.cartItem.update({
+                where: { id: existingItem.id },
+                data: { quantity },
+              });
+              return this.getCart(userId);
+            }
+          }
+        }
       } catch (err) {
-        if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+        if (err instanceof BadRequestException) throw err;
       }
     }
 
@@ -269,8 +270,8 @@ export class CartService {
               productId,
             },
           });
+          return this.getCart(userId);
         }
-        return this.getCart(userId);
       } catch {
         // Fallback
       }
