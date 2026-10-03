@@ -98,6 +98,7 @@ model Product {
   @@index([slug])
   @@index([sku])
   @@index([price])
+  @@index([isActive])
 }
 
 model ProductImage {
@@ -119,12 +120,13 @@ model InventoryMovement {
   changeQuantity Int      // e.g. -1 for reservation, +1 for release/restock
   previousStock  Int
   newStock       Int
-  reason         String   // ORDER_RESERVED, PAYMENT_FAILED_RELEASE, RESTOCK
+  reason         String   // ORDER_RESERVED, ORDER_CANCELLED_RELEASE, RESTOCK, INITIAL_STOCK
   referenceId    String?  // orderId
   createdAt      DateTime @default(now())
 
   @@index([productId])
   @@index([referenceId])
+  @@index([createdAt])
 }
 
 model Cart {
@@ -148,28 +150,31 @@ model CartItem {
 
   @@unique([cartId, productId])
   @@index([cartId])
+  @@index([productId])
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  orderNumber     String      @unique
+  id              String               @id @default(uuid())
+  orderNumber     String               @unique
   userId          String
-  user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  status          OrderStatus @default(PAYMENT_PENDING)
-  subtotal        Int
-  discountTotal   Int         @default(0)
-  taxTotal        Int         @default(0)
-  shippingFee     Int         @default(0)
-  grandTotal      Int
-  currency        String      @default("INR")
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status          OrderStatus          @default(PAYMENT_PENDING)
+  subtotal        Int                  // in paise
+  discountTotal   Int                  @default(0)
+  taxTotal        Int                  @default(0)
+  shippingFee     Int                  @default(0)
+  grandTotal      Int                  // in paise
+  currency        String               @default("INR")
   shippingAddress Json
   paymentId       String?
   trackingNumber  String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   items           OrderItem[]
   payments        Payment[]
+  statusHistory   OrderStatusHistory[]
+  shipment        Shipment?
 
   @@index([userId])
   @@index([orderNumber])
@@ -186,33 +191,98 @@ model OrderItem {
   productName    String
   sku            String
   quantity       Int
-  unitPrice      Int
+  unitPrice      Int      // in paise
   discountAmount Int      @default(0)
-  lineTotal      Int
+  lineTotal      Int      // in paise
   createdAt      DateTime @default(now())
 
   @@index([orderId])
   @@index([productId])
 }
 
+model OrderStatusHistory {
+  id         String      @id @default(uuid())
+  orderId    String
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus
+  toStatus   OrderStatus
+  reason     String?
+  createdAt  DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model Shipment {
+  id             String    @id @default(uuid())
+  orderId        String    @unique
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  trackingNumber String?   @unique
+  carrier        String    @default("BLUE_DART")
+  status         String    @default("PENDING")
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([trackingNumber])
+  @@index([status])
+}
+
 model Payment {
-  id             String        @id @default(uuid())
+  id             String         @id @default(uuid())
   orderId        String
-  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
   userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  amount         Int
-  currency       String        @default("INR")
-  status         PaymentStatus @default(PENDING)
-  provider       String        // STRIPE_SANDBOX, RAZORPAY_SANDBOX
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  amount         Int            // in paise
+  currency       String         @default("INR")
+  status         PaymentStatus  @default(PENDING)
+  provider       String         // STRIPE_SANDBOX, RAZORPAY_SANDBOX
   transactionRef String?
-  idempotencyKey String        @unique
+  idempotencyKey String         @unique
   payload        Json?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  events         PaymentEvent[]
 
   @@index([orderId])
   @@index([idempotencyKey])
+}
+
+model PaymentEvent {
+  id          String        @id @default(uuid())
+  paymentId   String
+  payment     Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  eventType   String        // PAYMENT_AUTHORIZED, PAYMENT_CAPTURED, PAYMENT_FAILED, REFUND_ISSUED
+  status      PaymentStatus
+  providerRef String?
+  payload     Json?
+  createdAt   DateTime      @default(now())
+
+  @@index([paymentId])
+  @@index([eventType])
+}
+
+model Coupon {
+  id                 String    @id @default(uuid())
+  code               String    @unique
+  description        String?
+  discountPercentage Int       @default(0)
+  discountAmount     Int?      // Fixed discount amount in paise
+  minOrderAmount     Int       @default(0) // in paise
+  maxDiscountAmount  Int?      // in paise
+  validFrom          DateTime  @default(now())
+  validUntil         DateTime?
+  usageLimit         Int?
+  usedCount          Int       @default(0)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([code])
+  @@index([isActive])
 }
 
 model AuditLog {

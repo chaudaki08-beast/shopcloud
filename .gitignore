@@ -47,6 +47,7 @@ infrastructure/terraform/**/*.tfvars
 coverage/
 .nyc_output/
 
-# Prisma
+# Prisma & Local DB
 dev.db
 dev.db-journal
+.pgdata/
