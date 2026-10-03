@@ -6,9 +6,16 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node src/seed.ts"
+    "db:generate": "dotenv -e ../../.env -- prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev --schema=prisma/schema.prisma",
+    "db:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy --schema=prisma/schema.prisma",
+    "db:status": "dotenv -e ../../.env -- prisma migrate status --schema=prisma/schema.prisma",
+    "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force --schema=prisma/schema.prisma",
+    "db:seed": "dotenv -e ../../.env -- ts-node src/seed.ts",
+    "test": "dotenv -e ../../.env -- ts-node test/database.test.ts",
+    "prisma:generate": "npm run db:generate",
+    "prisma:migrate": "npm run db:migrate",
+    "prisma:seed": "npm run db:seed"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
