@@ -64,8 +64,8 @@ flowchart TD
 | **Phase 2** | Backend & REST APIs | ✅ **COMPLETE** | `v0.2.0-phase2` |
 | **Phase 3** | PostgreSQL & Migrations | ✅ **COMPLETE** | `v0.3.0-phase3` |
 | **Phase 4** | Authentication & RBAC | ✅ **COMPLETE** | `v0.4.0-phase4` |
-| **Phase 5** | Docker Containerization | 🟡 **UP NEXT** | `v0.5.0-phase5` |
-| **Phase 6** | GCP Foundation & Networking | ⚪ NOT STARTED | `v0.6.0-phase6` |
+| **Phase 5** | Docker Containerization | ✅ **COMPLETE** | `v0.5.0-phase5` |
+| **Phase 6** | GCP Foundation & Networking | 🟡 **UP NEXT** | `v0.6.0-phase6` |
 | **Phase 7** | Cloud Run Deployment | ⚪ NOT STARTED | `v0.7.0-phase7` |
 | **Phase 8** | Cloud SQL Integration | ⚪ NOT STARTED | `v0.8.0-phase8` |
 | **Phase 9** | Cloud Storage & Signed URLs | ⚪ NOT STARTED | `v0.9.0-phase9` |
