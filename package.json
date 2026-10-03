@@ -13,9 +13,16 @@
     "dev:workers": "npm run dev --workspace=apps/workers",
     "build": "npm run --workspaces --if-present build",
     "test": "npm run --workspaces --if-present test",
-    "lint": "npm run --workspaces --if-present lint"
+    "lint": "npm run --workspaces --if-present lint",
+    "db:generate": "npm run db:generate --workspace=@shopcloud/database",
+    "db:migrate": "npm run db:migrate --workspace=@shopcloud/database",
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=@shopcloud/database",
+    "db:status": "npm run db:status --workspace=@shopcloud/database",
+    "db:reset": "npm run db:reset --workspace=@shopcloud/database",
+    "db:seed": "npm run db:seed --workspace=@shopcloud/database"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "typescript": "^5.5.4"
   }
 }
