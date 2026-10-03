@@ -62,8 +62,8 @@ flowchart TD
 | **Phase 0** | Architecture & System Blueprint | ✅ **COMPLETE** | `v0.0.0-architecture` |
 | **Phase 1** | Foundation (Monorepo, Web, API, Workers, Docker) | ✅ **COMPLETE** | `v0.1.0-phase1` |
 | **Phase 2** | Backend & REST APIs | ✅ **COMPLETE** | `v0.2.0-phase2` |
-| **Phase 3** | PostgreSQL & Migrations | 🟡 **UP NEXT** | `v0.3.0-phase3` |
-| **Phase 4** | Authentication & RBAC | ⚪ NOT STARTED | `v0.4.0-phase4` |
+| **Phase 3** | PostgreSQL & Migrations | ✅ **COMPLETE** | `v0.3.0-phase3` |
+| **Phase 4** | Authentication & RBAC | 🟡 **UP NEXT** | `v0.4.0-phase4` |
 | **Phase 5** | Docker Containerization | ⚪ NOT STARTED | `v0.5.0-phase5` |
 | **Phase 6** | GCP Foundation & Networking | ⚪ NOT STARTED | `v0.6.0-phase6` |
 | **Phase 7** | Cloud Run Deployment | ⚪ NOT STARTED | `v0.7.0-phase7` |
@@ -153,10 +153,19 @@ shopcloud/
 npm install
 ```
 
-### 3. Build Shared Contracts & Database Client
+### 3. Database Setup, Migrations & Seeding
 ```bash
-npm run build --workspace=@shopcloud/contracts
-npx prisma generate --schema=./packages/database/prisma/schema.prisma
+# Generate Prisma Client
+npm run db:generate
+
+# Apply migrations
+npm run db:migrate
+
+# Seed initial catalog, categories, dev users, and coupons
+npm run db:seed
+
+# Verify database layer integrity
+npm test -w @shopcloud/database
 ```
 
 ### 4. Run Services
