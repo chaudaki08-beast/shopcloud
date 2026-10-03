@@ -1,3 +1,4 @@
+import * as http from 'http';
 import { PubSub } from '@google-cloud/pubsub';
 import { InventoryWorker } from './inventory-worker';
 import { PaymentWorker } from './payment-worker';
@@ -6,6 +7,28 @@ import { CloudEventEnvelope, OrderCreatedEvent } from '@shopcloud/contracts';
 
 async function bootstrapWorkers() {
   console.log('⚡ Starting ShopCloud Event Workers Daemon...');
+
+  // Start lightweight HTTP health probe server for Docker & Cloud Run liveness/readiness
+  const healthPort = Number(process.env.HEALTH_PORT || process.env.PORT || 8081);
+  const healthServer = http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/liveness' || req.url === '/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'UP',
+          service: 'shopcloud-workers',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  healthServer.listen(healthPort, '0.0.0.0', () => {
+    console.log(`[Worker] Health probe active on http://0.0.0.0:${healthPort}/health`);
+  });
 
   const projectId = process.env.GCP_PROJECT_ID || 'shopcloud-dev';
   const emulatorHost = process.env.PUBSUB_EMULATOR_HOST;
@@ -54,7 +77,9 @@ async function bootstrapWorkers() {
   // Graceful shutdown
   const shutdown = () => {
     console.log('Shutting down workers gracefully...');
-    process.exit(0);
+    healthServer.close(() => {
+      process.exit(0);
+    });
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0-phase5] — Phase 5: Docker & Containerization (2026-10-04)
+
+### Added
+* Production-grade multi-stage Dockerfiles (`Dockerfile.api`, `Dockerfile.web`, `Dockerfile.worker`) utilizing `node:22-bookworm-slim` for Debian glibc/Prisma stability and `nginx:alpine` for the web layer
+* Unified Docker Compose topology (`compose.yaml` and `docker-compose.yml`) orchestrating `shopcloud-postgres`, `shopcloud-api`, `shopcloud-workers`, and `shopcloud-web` on a dedicated bridge network (`shopcloud-network`)
+* Service dependency graph enforcing logical container readiness via healthcheck dependencies (`service_healthy`) across all services
+* Zero-dependency HTTP health checks on API (`/api/v1/health/liveness`), Workers (`/health`), and Web (`/health`)
+* Lightweight HTTP health probe server integrated into `@shopcloud/workers` on port 8081 for Cloud Run and Compose liveness probes
+* Security-hardened container execution running as unprivileged non-root user (`USER node`, UID 1000) with devDependencies pruned (`npm prune --omit=dev`)
+* Comprehensive root `.dockerignore` eliminating repository bloat, version control metadata, and local database artifacts from image build contexts
+* Docker environment configuration template (`.env.docker.example`) documenting all runtime environment variables with zero committed secrets
+* Separated database migration deployment profile (`db-migrate` and `db-seed`) preventing destructive or accidental migration runs on API container startup
+* Enhanced `apps/web/nginx.conf` with security headers, Gzip compression, static asset caching headers, and SPA client-side routing fallback
+* Comprehensive containerization documentation in `docs/docker/README.md` and GCP Cloud Run runtime compatibility review in `docs/docker/cloud-run-compatibility.md`
+
+---
+
 ## [0.4.0-phase4] — Phase 4: Authentication & RBAC (2026-10-03)
 
 ### Added
