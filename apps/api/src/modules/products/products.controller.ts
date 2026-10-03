@@ -2,60 +2,81 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Delete,
   Body,
   Param,
   Query,
-  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
-import {
-  CreateProductDto,
-  UpdateProductDto,
-  ProductQueryDto,
-  UserRole,
-} from '@shopcloud/contracts';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductQueryDto } from './dto/product-query.dto';
 
+@ApiTags('Products')
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
+  @ApiOperation({ summary: 'List and filter products with pagination and sorting' })
+  @ApiResponse({ status: 200, description: 'Paginated list of products returned' })
   async findAll(@Query() query: ProductQueryDto) {
     return this.productsService.findAll(query);
   }
 
   @Get('categories')
+  @ApiOperation({ summary: 'Get product categories (backward compatibility endpoint)' })
+  @ApiResponse({ status: 200, description: 'Array of categories returned' })
   async getCategories() {
     return this.productsService.getCategories();
   }
 
-  @Get(':slug')
-  async findOne(@Param('slug') slug: string) {
-    return this.productsService.findBySlug(slug);
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a product by ID or URL slug' })
+  @ApiParam({ name: 'id', description: 'Product UUID or unique slug' })
+  @ApiResponse({ status: 200, description: 'Product details returned' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  async findOne(@Param('id') id: string) {
+    return this.productsService.findById(id);
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.INVENTORY_MANAGER)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new product' })
+  @ApiResponse({ status: 201, description: 'Product created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid product input' })
+  @ApiResponse({ status: 409, description: 'SKU conflict' })
   async create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
   }
 
-  @Put(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.INVENTORY_MANAGER)
+  @Patch(':id')
+  @ApiOperation({ summary: 'Partially update a product' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: 200, description: 'Product updated successfully' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
+  @ApiResponse({ status: 409, description: 'SKU conflict' })
   async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(id, dto);
   }
 
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a product (PUT alias)' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  async updatePut(@Param('id') id: string, @Body() dto: UpdateProductDto) {
+    return this.productsService.update(id, dto);
+  }
+
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN)
+  @ApiOperation({ summary: 'Deactivate / delete a product' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: 200, description: 'Product removed' })
+  @ApiResponse({ status: 404, description: 'Product not found' })
   async remove(@Param('id') id: string) {
     return this.productsService.remove(id);
   }

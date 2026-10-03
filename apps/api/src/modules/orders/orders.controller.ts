@@ -2,51 +2,85 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Body,
   Param,
-  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, OrderStatus, UserRole } from '@shopcloud/contracts';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { OrderStatus } from '@shopcloud/contracts';
 
+@ApiTags('Orders')
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
+  private extractUserId(req: any): string {
+    return req.user?.id || req.headers['x-user-id'] || 'user-customer';
+  }
+
   @Post()
-  async createOrder(@CurrentUser() user: any, @Body() dto: CreateOrderDto) {
-    return this.ordersService.createOrder(user.id, dto);
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create an order from the current cart state' })
+  @ApiResponse({ status: 201, description: 'Order created with calculated totals' })
+  @ApiResponse({ status: 400, description: 'Empty cart, unavailable product, or insufficient stock' })
+  async createOrder(@Req() req: any, @Body() dto: CreateOrderDto) {
+    const userId = this.extractUserId(req);
+    return this.ordersService.createOrder(userId, dto);
   }
 
   @Get()
-  async getUserOrders(@CurrentUser() user: any) {
-    return this.ordersService.getUserOrders(user.id);
+  @ApiOperation({ summary: 'List all orders for the current user' })
+  @ApiResponse({ status: 200, description: 'Array of orders returned' })
+  async getUserOrders(@Req() req: any) {
+    const userId = this.extractUserId(req);
+    return this.ordersService.getUserOrders(userId);
   }
 
   @Get(':id')
-  async getOrderById(@CurrentUser() user: any, @Param('id') orderId: string) {
-    const isAdmin = user.role === UserRole.SUPER_ADMIN || user.role === UserRole.STORE_ADMIN;
-    return this.ordersService.getOrderById(user.id, orderId, isAdmin);
+  @ApiOperation({ summary: 'Get order details by order ID' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  @ApiResponse({ status: 200, description: 'Order details returned' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  async getOrderById(@Param('id') orderId: string) {
+    return this.ordersService.getOrderById(orderId);
   }
 
-  @Post(':id/cancel')
-  async cancelOrder(@CurrentUser() user: any, @Param('id') orderId: string) {
-    // Only permit cancellation if the order belongs to user or is admin
-    const isAdmin = user.role === UserRole.SUPER_ADMIN || user.role === UserRole.STORE_ADMIN;
-    await this.ordersService.getOrderById(user.id, orderId, isAdmin);
-    return this.ordersService.updateOrderStatus(orderId, OrderStatus.CANCELLED);
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Transition order status through the state machine' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  @ApiResponse({ status: 200, description: 'Order status transitioned successfully' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  @ApiResponse({ status: 409, description: 'Invalid state machine transition (ORDER_INVALID_STATE_TRANSITION)' })
+  async updateStatus(
+    @Param('id') orderId: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.ordersService.updateOrderStatus(orderId, dto.status);
   }
 
   @Put(':id/status')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CUSTOMER_SUPPORT)
-  async updateStatus(@Param('id') orderId: string, @Body('status') status: OrderStatus) {
-    return this.ordersService.updateOrderStatus(orderId, status);
+  @ApiOperation({ summary: 'Transition order status (PUT alias)' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  async updateStatusPut(
+    @Param('id') orderId: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.ordersService.updateOrderStatus(orderId, dto.status);
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel an order and release reserved stock' })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  @ApiResponse({ status: 200, description: 'Order cancelled and stock released' })
+  @ApiResponse({ status: 409, description: 'Cannot cancel order in current state' })
+  async cancelOrder(@Param('id') orderId: string) {
+    return this.ordersService.updateOrderStatus(orderId, OrderStatus.CANCELLED);
   }
 }

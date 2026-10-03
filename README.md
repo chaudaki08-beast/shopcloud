@@ -61,8 +61,8 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture & System Blueprint | ✅ **COMPLETE** | `v0.0.0-architecture` |
 | **Phase 1** | Foundation (Monorepo, Web, API, Workers, Docker) | ✅ **COMPLETE** | `v0.1.0-phase1` |
-| **Phase 2** | Backend & REST APIs | 🟡 **IN PROGRESS** | `v0.2.0-phase2` |
-| **Phase 3** | PostgreSQL & Migrations | ⚪ NOT STARTED | `v0.3.0-phase3` |
+| **Phase 2** | Backend & REST APIs | ✅ **COMPLETE** | `v0.2.0-phase2` |
+| **Phase 3** | PostgreSQL & Migrations | 🟡 **UP NEXT** | `v0.3.0-phase3` |
 | **Phase 4** | Authentication & RBAC | ⚪ NOT STARTED | `v0.4.0-phase4` |
 | **Phase 5** | Docker Containerization | ⚪ NOT STARTED | `v0.5.0-phase5` |
 | **Phase 6** | GCP Foundation & Networking | ⚪ NOT STARTED | `v0.6.0-phase6` |

@@ -1,78 +1,130 @@
 import { CartService } from './cart.service';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
-describe('CartService Financial Calculations', () => {
+describe('CartService', () => {
   let service: CartService;
+  const testUserId = 'test-cart-user-1';
 
   beforeEach(() => {
     service = new CartService();
   });
 
-  it('should accurately calculate subtotal, discount, GST, and shipping', () => {
-    // Mock cart items: Product with ₹50,000 price (5000000 paise) and 10% discount
-    const mockItems = [
-      {
-        id: 'item-1',
-        quantity: 1,
-        product: {
-          id: 'prod-1',
-          name: 'Samsung Galaxy Phone',
-          sku: 'SAM-PHONE',
-          description: 'Flagship phone',
-          price: 5000000, // ₹50,000.00 in paise
-          discountPercentage: 10, // 10% discount = ₹5,000.00
-          stock: 20,
-          categoryId: 'cat-1',
-          isActive: true,
-          attributes: {},
-          images: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
+  describe('Financial Calculations (Server-side Authoritative)', () => {
+    it('should accurately calculate subtotal, discount, GST, and shipping', () => {
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          product: {
+            id: 'prod-1',
+            name: 'Samsung Galaxy Phone',
+            sku: 'SAM-PHONE',
+            description: 'Flagship phone',
+            price: 5000000, // ₹50,000.00 in paise
+            discountPercentage: 10, // 10% discount = ₹5,000.00
+            stock: 20,
+            categoryId: 'cat-1',
+            isActive: true,
+            attributes: {},
+            images: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
         },
-      },
-    ];
+      ];
 
-    const summary = (service as any).calculateCartSummary(mockItems);
+      const summary = (service as any).calculateCartSummary(mockItems);
 
-    // Subtotal = 50,000.00 (5,000,000 paise)
-    expect(summary.subtotal).toBe(5000000);
-    // Discount = 5,000.00 (500,000 paise)
-    expect(summary.discountTotal).toBe(500000);
+      expect(summary.subtotal).toBe(5000000);
+      expect(summary.discountTotal).toBe(500000);
+      expect(summary.taxTotal).toBe(810000);
+      expect(summary.shippingFee).toBe(49900);
+      expect(summary.grandTotal).toBe(5359900);
+    });
 
-    // Discounted Subtotal = 45,000.00 (4,500,000 paise)
-    // GST 18% on discounted subtotal = 45,000 * 0.18 = 8,100.00 (810,000 paise)
-    expect(summary.taxTotal).toBe(810000);
+    it('should provide free shipping if discounted subtotal exceeds ₹50,000 threshold', () => {
+      const mockItems = [
+        {
+          id: 'item-2',
+          quantity: 1,
+          product: {
+            id: 'prod-2',
+            name: 'MacBook Pro M4',
+            sku: 'APL-MBP',
+            description: 'High-end laptop',
+            price: 20000000,
+            discountPercentage: 0,
+            stock: 10,
+            categoryId: 'cat-2',
+            isActive: true,
+            attributes: {},
+            images: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ];
 
-    // Discounted subtotal (45,000) <= 50,000 threshold, so standard shipping ₹499 applies (49,900 paise)
-    expect(summary.shippingFee).toBe(49900);
-
-    // Total = 45,000 + 8,100 + 499 = 53,599.00 (5,359,900 paise)
-    expect(summary.grandTotal).toBe(5359900);
+      const summary = (service as any).calculateCartSummary(mockItems);
+      expect(summary.shippingFee).toBe(0);
+    });
   });
 
-  it('should provide free shipping if discounted subtotal exceeds ₹50,000 threshold', () => {
-    const mockItems = [
-      {
-        id: 'item-2',
-        quantity: 1,
-        product: {
-          id: 'prod-2',
-          name: 'MacBook Pro M4',
-          sku: 'APL-MBP',
-          description: 'High-end laptop',
-          price: 20000000, // ₹2,00,000.00 in paise
-          discountPercentage: 0,
-          stock: 10,
-          categoryId: 'cat-2',
-          isActive: true,
-          attributes: {},
-          images: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      },
-    ];
+  describe('Cart Item Operations & Business Rules', () => {
+    it('should add a valid product to cart', async () => {
+      const cart = await service.addItem(testUserId, 'prod-s25-ultra', 1);
 
-    const summary = (service as any).calculateCartSummary(mockItems);
-    expect(summary.shippingFee).toBe(0); // Free shipping qualified
+      expect(cart.items.length).toBe(1);
+      expect(cart.items[0].productId).toBe('prod-s25-ultra');
+      expect(cart.items[0].quantity).toBe(1);
+      expect(cart.grandTotal).toBeGreaterThan(0);
+    });
+
+    it('should reject adding non-existent product (NotFoundException)', async () => {
+      await expect(service.addItem(testUserId, 'non-existent-product', 1)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should reject quantity <= 0 (BadRequestException)', async () => {
+      await expect(service.addItem(testUserId, 'prod-s25-ultra', 0)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.addItem(testUserId, 'prod-s25-ultra', -2)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should reject quantity exceeding available stock (BadRequestException)', async () => {
+      // prod-ip16-pro has stock: 3
+      await expect(service.addItem(testUserId, 'prod-ip16-pro', 99)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should update item quantity in cart', async () => {
+      await service.addItem(testUserId, 'prod-s25-ultra', 1);
+      const updated = await service.updateItemQuantity(testUserId, 'prod-s25-ultra', 2);
+
+      const item = updated.items.find((i) => i.productId === 'prod-s25-ultra');
+      expect(item?.quantity).toBe(2);
+    });
+
+    it('should remove item from cart', async () => {
+      await service.addItem(testUserId, 'prod-s25-ultra', 1);
+      const updated = await service.removeItem(testUserId, 'prod-s25-ultra');
+
+      const item = updated.items.find((i) => i.productId === 'prod-s25-ultra');
+      expect(item).toBeUndefined();
+    });
+
+    it('should clear all items from cart', async () => {
+      await service.addItem(testUserId, 'prod-s25-ultra', 1);
+      await service.clearCart(testUserId);
+
+      const emptyCart = await service.getCart(testUserId);
+      expect(emptyCart.items.length).toBe(0);
+      expect(emptyCart.grandTotal).toBe(0);
+    });
   });
 });
