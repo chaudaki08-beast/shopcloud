@@ -1,11 +1,25 @@
 import { ProductsService } from './products.service';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { prisma } from '@shopcloud/database';
 
 describe('ProductsService', () => {
   let service: ProductsService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     service = new ProductsService();
+    try {
+      await prisma.product.deleteMany({
+        where: { sku: 'GOOG-PIX9-FOLD' },
+      });
+    } catch {}
+  });
+
+  afterAll(async () => {
+    try {
+      await prisma.product.deleteMany({
+        where: { sku: 'GOOG-PIX9-FOLD' },
+      });
+    } catch {}
   });
 
   describe('findAll, pagination & filtering', () => {

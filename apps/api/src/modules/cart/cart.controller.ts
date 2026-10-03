@@ -8,22 +8,29 @@ import {
   Body,
   Param,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 
 @ApiTags('Cart')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   private extractUserId(req: any): string {
-    return req.user?.id || req.headers['x-user-id'] || 'user-customer';
+    return req.user?.id || req.headers?.['x-user-id'] || 'user-customer';
   }
 
   @Get()
+  @RequirePermissions('cart:read')
   @ApiOperation({ summary: 'Get current user cart with authoritative server-side calculations' })
   @ApiResponse({ status: 200, description: 'Cart summary returned with calculated totals' })
   async getCart(@Req() req: any) {
@@ -32,6 +39,7 @@ export class CartController {
   }
 
   @Post('items')
+  @RequirePermissions('cart:update')
   @ApiOperation({ summary: 'Add a product to the cart' })
   @ApiResponse({ status: 201, description: 'Product added and updated cart returned' })
   @ApiResponse({ status: 400, description: 'Invalid quantity, inactive product, or insufficient stock' })
@@ -42,6 +50,7 @@ export class CartController {
   }
 
   @Patch('items/:productId')
+  @RequirePermissions('cart:update')
   @ApiOperation({ summary: 'Update item quantity in cart' })
   @ApiParam({ name: 'productId', description: 'Product UUID' })
   @ApiResponse({ status: 200, description: 'Item quantity updated and cart recalculated' })
@@ -57,6 +66,7 @@ export class CartController {
   }
 
   @Put('items/:productId')
+  @RequirePermissions('cart:update')
   @ApiOperation({ summary: 'Update item quantity in cart (PUT alias)' })
   @ApiParam({ name: 'productId', description: 'Product UUID' })
   async updateQuantityPut(
@@ -69,6 +79,7 @@ export class CartController {
   }
 
   @Delete('items/:productId')
+  @RequirePermissions('cart:update')
   @ApiOperation({ summary: 'Remove a specific item from cart' })
   @ApiParam({ name: 'productId', description: 'Product UUID' })
   @ApiResponse({ status: 200, description: 'Item removed from cart' })
@@ -78,6 +89,7 @@ export class CartController {
   }
 
   @Delete()
+  @RequirePermissions('cart:update')
   @ApiOperation({ summary: 'Clear all items from the cart' })
   @ApiResponse({ status: 200, description: 'Cart cleared successfully' })
   async clearCart(@Req() req: any) {

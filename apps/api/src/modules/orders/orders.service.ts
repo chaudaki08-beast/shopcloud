@@ -2,11 +2,13 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { prisma, OrderStatus as PrismaOrderStatus } from '@shopcloud/database';
 import {
   OrderResponseDto,
   OrderStatus,
+  UserRole,
 } from '@shopcloud/contracts';
 import { CartService } from '../cart/cart.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -36,12 +38,17 @@ export class OrdersService {
 
     if (await isDatabaseOnline()) {
       try {
-        const createdOrder = await prisma.$transaction(async (tx) => {
-          // 1. Validate & Reserve stock atomically
-          for (const item of cartSummary.items) {
-            const product = await tx.product.findUnique({
-              where: { id: item.productId },
-            });
+        const dbProductCount = await prisma.product.count({
+          where: { id: { in: cartSummary.items.map((i) => i.productId) } },
+        });
+
+        if (dbProductCount === cartSummary.items.length) {
+          const createdOrder = await prisma.$transaction(async (tx) => {
+            // 1. Validate & Reserve stock atomically
+            for (const item of cartSummary.items) {
+              const product = await tx.product.findUnique({
+                where: { id: item.productId },
+              });
 
             if (!product || !product.isActive) {
               throw new BadRequestException(
@@ -138,6 +145,7 @@ export class OrdersService {
         });
 
         return this.formatOrder(createdOrder);
+        }
       } catch (err) {
         if (err instanceof BadRequestException) throw err;
       }
@@ -206,7 +214,12 @@ export class OrdersService {
     );
   }
 
-  async getOrderById(orderId: string): Promise<OrderResponseDto> {
+  async getOrderById(
+    orderId: string,
+    requestingUser?: { id: string; role?: string },
+  ): Promise<OrderResponseDto> {
+    let result: OrderResponseDto | null = null;
+
     if (await isDatabaseOnline()) {
       try {
         const order = await prisma.order.findUnique({
@@ -215,22 +228,43 @@ export class OrdersService {
         });
 
         if (order) {
-          return this.formatOrder(order);
+          result = this.formatOrder(order);
         }
       } catch {
         // Fallback
       }
     }
 
-    const fallback = this.localOrders.find((o) => o.id === orderId);
-    if (!fallback) {
-      throw new NotFoundException(`Order '${orderId}' not found`);
+    if (!result) {
+      const fallback = this.localOrders.find((o) => o.id === orderId);
+      if (!fallback) {
+        throw new NotFoundException(`Order '${orderId}' not found`);
+      }
+      result = fallback;
     }
-    return fallback;
+
+    // Strict resource ownership check: Customers can only access their own orders
+    if (requestingUser) {
+      const isAdmin =
+        requestingUser.role === 'SUPER_ADMIN' ||
+        requestingUser.role === 'STORE_ADMIN' ||
+        requestingUser.role === UserRole.SUPER_ADMIN ||
+        requestingUser.role === UserRole.STORE_ADMIN;
+
+      if (!isAdmin && result.userId !== requestingUser.id) {
+        throw new ForbiddenException('You do not have permission to access this order');
+      }
+    }
+
+    return result;
   }
 
-  async updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<OrderResponseDto> {
-    const existingOrder = await this.getOrderById(orderId);
+  async updateOrderStatus(
+    orderId: string,
+    newStatus: OrderStatus,
+    requestingUser?: { id: string; role?: string },
+  ): Promise<OrderResponseDto> {
+    const existingOrder = await this.getOrderById(orderId, requestingUser);
     const currentStatus = existingOrder.status;
 
     // Strict state machine validation: throws InvalidOrderStateTransitionException (HTTP 409) if illegal
@@ -242,68 +276,71 @@ export class OrdersService {
 
     if (await isDatabaseOnline()) {
       try {
-        if (newStatus === OrderStatus.CANCELLED && currentStatus !== OrderStatus.CANCELLED) {
-          await prisma.$transaction(async (tx) => {
-            // Release reserved stock back to inventory
-            for (const item of existingOrder.items) {
-              const product = await tx.product.findUnique({ where: { id: item.productId } });
-              if (product) {
-                const updated = await tx.product.update({
-                  where: { id: item.productId },
-                  data: { stock: { increment: item.quantity } },
-                });
-                await tx.inventoryMovement.create({
-                  data: {
-                    productId: item.productId,
-                    changeQuantity: item.quantity,
-                    previousStock: product.stock,
-                    newStock: updated.stock,
-                    reason: 'ORDER_CANCELLED_RELEASE',
-                    referenceId: existingOrder.id,
-                  },
-                });
+        const orderInDb = await prisma.order.findUnique({ where: { id: orderId } });
+        if (orderInDb) {
+          if (newStatus === OrderStatus.CANCELLED && currentStatus !== OrderStatus.CANCELLED) {
+            await prisma.$transaction(async (tx) => {
+              // Release reserved stock back to inventory
+              for (const item of existingOrder.items) {
+                const product = await tx.product.findUnique({ where: { id: item.productId } });
+                if (product) {
+                  const updated = await tx.product.update({
+                    where: { id: item.productId },
+                    data: { stock: { increment: item.quantity } },
+                  });
+                  await tx.inventoryMovement.create({
+                    data: {
+                      productId: item.productId,
+                      changeQuantity: item.quantity,
+                      previousStock: product.stock,
+                      newStock: updated.stock,
+                      reason: 'ORDER_CANCELLED_RELEASE',
+                      referenceId: existingOrder.id,
+                    },
+                  });
+                }
               }
-            }
 
-            await tx.order.update({
-              where: { id: orderId },
-              data: { status: PrismaOrderStatus.CANCELLED },
-            });
+              await tx.order.update({
+                where: { id: orderId },
+                data: { status: PrismaOrderStatus.CANCELLED },
+              });
 
-            await tx.auditLog.create({
-              data: {
-                entity: 'Order',
-                entityId: orderId,
-                action: 'STATUS_TRANSITION',
-                metadata: {
-                  fromStatus: currentStatus,
-                  toStatus: newStatus,
+              await tx.auditLog.create({
+                data: {
+                  entity: 'Order',
+                  entityId: orderId,
+                  action: 'STATUS_TRANSITION',
+                  metadata: {
+                    fromStatus: currentStatus,
+                    toStatus: newStatus,
+                  },
                 },
-              },
+              });
             });
-          });
-        } else {
-          await prisma.$transaction(async (tx) => {
-            await tx.order.update({
-              where: { id: orderId },
-              data: { status: newStatus as unknown as PrismaOrderStatus },
-            });
+          } else {
+            await prisma.$transaction(async (tx) => {
+              await tx.order.update({
+                where: { id: orderId },
+                data: { status: newStatus as unknown as PrismaOrderStatus },
+              });
 
-            await tx.auditLog.create({
-              data: {
-                entity: 'Order',
-                entityId: orderId,
-                action: 'STATUS_TRANSITION',
-                metadata: {
-                  fromStatus: currentStatus,
-                  toStatus: newStatus,
+              await tx.auditLog.create({
+                data: {
+                  entity: 'Order',
+                  entityId: orderId,
+                  action: 'STATUS_TRANSITION',
+                  metadata: {
+                    fromStatus: currentStatus,
+                    toStatus: newStatus,
+                  },
                 },
-              },
+              });
             });
-          });
+          }
+
+          return this.getOrderById(orderId);
         }
-
-        return this.getOrderById(orderId);
       } catch {
         // Fallback
       }

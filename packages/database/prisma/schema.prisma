@@ -7,6 +7,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum Role {
   SUPER_ADMIN
   STORE_ADMIN
@@ -39,22 +44,63 @@ enum PaymentStatus {
 }
 
 model User {
-  id           String      @id @default(uuid())
-  email        String      @unique
+  id           String        @id @default(uuid())
+  email        String        @unique
   passwordHash String
   firstName    String
   lastName     String
-  role         Role        @default(CUSTOMER)
-  isActive     Boolean     @default(true)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  role         Role          @default(CUSTOMER)
+  status       AccountStatus @default(ACTIVE)
+  isActive     Boolean       @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  cart         Cart?
-  orders       Order[]
-  payments     Payment[]
-  auditLogs    AuditLog[]
+  cart          Cart?
+  orders        Order[]
+  payments      Payment[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
 
   @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid())
+  tokenId           String    @unique
+  tokenHash         String
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([tokenId])
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+
+  @@index([name])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([role, permissionId])
   @@index([role])
 }
 
