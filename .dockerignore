@@ -1,0 +1,51 @@
+# Git Version Control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies & Package Manager caches
+node_modules
+.pnpm-store
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build and Compilation Artifacts
+dist
+build
+coverage
+*.tsbuildinfo
+.eslintcache
+
+# Environment & Secrets (Never bake into images)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Local Database Files & Logs
+.pgdata
+*.log
+pg_hba.conf
+pg_ident.conf
+PG_VERSION
+postgresql.auto.conf
+postgresql.conf
+postmaster.opts
+postmaster.pid
+server.log
+
+# IDE & Operating System Junk
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Documentation & Test Artifacts
+docs/
+infrastructure/k6/
+tests/

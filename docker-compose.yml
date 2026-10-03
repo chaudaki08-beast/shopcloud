@@ -1,0 +1,168 @@
+name: shopcloud
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Relational Database: PostgreSQL 16
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: shopcloud-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-shopcloud}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-shopcloud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      shopcloud-network:
+        aliases:
+          - postgres
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend REST API Gateway: NestJS 10
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: shopcloud-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-shopcloud}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-shopcloud-dev-jwt-access-secret-replace-in-secret-manager}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-shopcloud-dev-jwt-refresh-secret-replace-in-secret-manager}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      CORS_ORIGIN: "*"
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({ host: '127.0.0.1', port: 3000, path: '/api/v1/health/liveness', timeout: 3000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      shopcloud-network:
+        aliases:
+          - api
+
+  # ----------------------------------------------------------------------------
+  # 3. Asynchronous Event Consumer Workers Daemon
+  # ----------------------------------------------------------------------------
+  workers:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: shopcloud-workers
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HEALTH_PORT: 8081
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-shopcloud}?schema=public
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-shopcloud-dev}
+      PUBSUB_EMULATOR_HOST: ${PUBSUB_EMULATOR_HOST:-pubsub:8085}
+    ports:
+      - "${WORKERS_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({ host: '127.0.0.1', port: 8081, path: '/health', timeout: 3000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      shopcloud-network:
+        aliases:
+          - workers
+
+  # ----------------------------------------------------------------------------
+  # 4. Frontend Web Storefront & Admin Portal: React Vite + Nginx
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: shopcloud-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      shopcloud-network:
+        aliases:
+          - web
+
+  # ----------------------------------------------------------------------------
+  # 5. Database Migration & Seeding Runner (Invoked on-demand)
+  # Run via: docker compose --profile tools run --rm db-migrate
+  # ----------------------------------------------------------------------------
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: shopcloud-db-migrate
+    command: ["npx", "prisma", "migrate", "deploy", "--schema=./packages/database/prisma/schema.prisma"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-shopcloud}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - shopcloud-network
+    profiles:
+      - tools
+
+  db-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: shopcloud-db-seed
+    command: ["node", "packages/database/dist/seed.js"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-shopcloud}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - shopcloud-network
+    profiles:
+      - tools
+
+# ------------------------------------------------------------------------------
+# Persistent Volumes & Dedicated Bridge Network
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: shopcloud_postgres_data
+
+networks:
+  shopcloud-network:
+    name: shopcloud_network
+    driver: bridge
