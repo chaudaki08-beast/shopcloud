@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0-phase3] — Phase 3: PostgreSQL & Migrations (2026-10-03)
+
+### Added
+* Enterprise relational PostgreSQL schema with 16 domain models: `User`, `Category`, `Product`, `ProductImage`, `InventoryMovement`, `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `Shipment`, `Payment`, `PaymentEvent`, `Coupon`, `AuditLog`, and `Notification`
+* Version-controlled incremental migration history (`20261003090131_init_shopcloud_schema`) managed via Prisma Migrate
+* Root-level and package-level database orchestration CLI commands: `npm run db:migrate`, `npm run db:migrate:deploy`, `npm run db:status`, `npm run db:seed`, `npm run db:reset`, and `npm run db:generate`
+* Deterministic, idempotent catalog and user seeding script (`packages/database/src/seed.ts`) populating categories, tech products, primary images, initial stock inventory movements, demo role accounts (`admin`, `customer`, `inventory`), and coupons
+* Zero-floating-point financial integrity across all models storing monetary values as integer paise
+* Automated `@shopcloud/database` test suite verifying database connectivity, seed validation, relational navigation, transactional order placement with stock decrement, order status transitions, and foreign key constraint enforcement
+* Comprehensive database architectural documentation and Mermaid ERD in `docs/database/README.md`
+* Future-ready connection abstraction for zero-refactoring deployment to Google Cloud SQL
+
+---
+
 ## [0.2.0-phase2] — Phase 2: Backend & REST APIs (2026-10-03)
 
 ### Added
