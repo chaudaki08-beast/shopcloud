@@ -109,7 +109,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                         <div className="text-right">
                           <div className="text-sm font-bold text-slate-900">
-                            ₹{(item.lineTotal / 100).toLocaleString('en-IN')}
+                            ₹{Math.round(item.lineTotal / 100).toLocaleString('en-IN')}
                           </div>
                         </div>
 
@@ -135,30 +135,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-medium text-slate-900">
-                    ₹{subtotal.toLocaleString('en-IN')}
+                    ₹{Math.round(subtotal).toLocaleString('en-IN')}
                   </span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-medium">
                     <span>Discount</span>
-                    <span>-₹{discount.toLocaleString('en-IN')}</span>
+                    <span>-₹{Math.round(discount).toLocaleString('en-IN')}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>GST (18%)</span>
                   <span className="font-medium text-slate-900">
-                    ₹{tax.toLocaleString('en-IN')}
+                    ₹{Math.round(tax).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Shipping</span>
                   <span className="font-medium text-slate-900">
-                    {shipping === 0 ? 'FREE' : `₹${shipping.toLocaleString('en-IN')}`}
+                    {shipping === 0 ? 'FREE' : `₹${Math.round(shipping).toLocaleString('en-IN')}`}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex justify-between text-base font-bold text-slate-900">
                   <span>Total</span>
-                  <span className="text-blue-600">₹{total.toLocaleString('en-IN')}</span>
+                  <span className="text-blue-600">₹{Math.round(total).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 

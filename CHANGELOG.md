@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.2.0-phase2] — Phase 2: Backend & REST APIs (2026-10-03)
 
 ### Added
-* Work in progress for Phase 1 (Foundation)
+* Complete Product REST API (`POST`, `GET`, `GET :id`, `PATCH`, `DELETE`) with allowlisted sorting (`name`, `price`, `createdAt`, `updatedAt`), pagination metadata envelope, and multi-parameter filtering
+* Dedicated Category REST API (`POST`, `GET`, `GET :id`, `PATCH`, `DELETE`) with automated slugification, duplicate slug validation, and deletion protection for active categories
+* Cart REST API (`GET`, `POST /items`, `PATCH /items/:productId`, `DELETE /items/:productId`, `DELETE`) with strict stock revalidation and zero-trust server-side financial calculations (subtotal, 18% GST, free shipping threshold)
+* Order REST API (`POST`, `GET`, `GET :id`, `PATCH :id/status`, `POST :id/cancel`) with atomic inventory reservation and stock release
+* Dedicated `OrderStateMachine` enforcing full e-commerce lifecycle (`CART` -> `CHECKOUT` -> `PAYMENT_PENDING` -> `PAYMENT_SUCCESS` -> `CONFIRMED` -> `PROCESSING` -> `SHIPPED` -> `OUT_FOR_DELIVERY` -> `DELIVERED`, cancellation, RMA flow) and rejecting invalid transitions with HTTP 409 Conflict (`ORDER_INVALID_STATE_TRANSITION`)
+* Status transition audit logging in `AuditLog`
+* Standardized error response filter (`GlobalHttpExceptionFilter`) and success response interceptor (`TransformInterceptor`)
+* Interactive OpenAPI / Swagger documentation mounted at `/api/docs`
+* Comprehensive 60-test automated suite covering Products, Categories, Cart, Orders, and Order State Machine matrix
+* Frontend API client updated with typed functions consuming Phase 2 endpoints
 
 ---
 

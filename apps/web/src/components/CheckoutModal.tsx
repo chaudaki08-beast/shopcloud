@@ -227,7 +227,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div>
               <div className="text-xs text-slate-500">Total payable</div>
               <div className="text-xl font-bold text-slate-900">
-                ₹{total.toLocaleString('en-IN')}
+                ₹{Math.round(total).toLocaleString('en-IN')}
               </div>
             </div>
 
