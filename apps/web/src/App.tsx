@@ -141,8 +141,12 @@ export const App: React.FC = () => {
     alert(`Order #${order.orderNumber} successfully placed! CloudEvent published to GCP Pub/Sub.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {}
     localStorage.removeItem('shopcloud_token');
+    localStorage.removeItem('shopcloud_refresh_token');
     setUser(null);
     setCart(null);
     setOrders([]);

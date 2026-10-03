@@ -6,6 +6,33 @@ export enum UserRole {
   CUSTOMER = 'CUSTOMER',
 }
 
+export enum AccountStatus {
+  ACTIVE = 'ACTIVE',
+  DISABLED = 'DISABLED',
+}
+
+export enum AppPermission {
+  PRODUCTS_READ = 'products:read',
+  PRODUCTS_CREATE = 'products:create',
+  PRODUCTS_UPDATE = 'products:update',
+  PRODUCTS_DELETE = 'products:delete',
+  CATEGORIES_READ = 'categories:read',
+  CATEGORIES_CREATE = 'categories:create',
+  CATEGORIES_UPDATE = 'categories:update',
+  CATEGORIES_DELETE = 'categories:delete',
+  CART_READ = 'cart:read',
+  CART_UPDATE = 'cart:update',
+  ORDERS_READ = 'orders:read',
+  ORDERS_CREATE = 'orders:create',
+  ORDERS_UPDATE = 'orders:update',
+  ORDERS_CANCEL = 'orders:cancel',
+  INVENTORY_READ = 'inventory:read',
+  INVENTORY_UPDATE = 'inventory:update',
+  USERS_READ = 'users:read',
+  USERS_UPDATE = 'users:update',
+  ADMIN_MANAGE = 'admin:manage',
+}
+
 export enum OrderStatus {
   CART = 'CART',
   CHECKOUT = 'CHECKOUT',

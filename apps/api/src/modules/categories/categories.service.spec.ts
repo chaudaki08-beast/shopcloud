@@ -4,8 +4,23 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 describe('CategoriesService', () => {
   let service: CategoriesService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     service = new CategoriesService();
+    try {
+      await service.remove('smart-home-iot');
+    } catch {}
+    try {
+      await service.remove('temp-cat-for-delete');
+    } catch {}
+  });
+
+  afterAll(async () => {
+    try {
+      await service.remove('smart-home-iot');
+    } catch {}
+    try {
+      await service.remove('temp-cat-for-delete');
+    } catch {}
   });
 
   it('should list initial seed categories', async () => {

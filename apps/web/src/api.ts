@@ -63,6 +63,12 @@ export const api = {
     request<AuthResponseDto>('/auth/login', { method: 'POST', body: JSON.stringify(dto) }),
   register: (dto: RegisterRequestDto) =>
     request<AuthResponseDto>('/auth/register', { method: 'POST', body: JSON.stringify(dto) }),
+  refreshToken: (refreshToken: string) =>
+    request<{ accessToken: string; refreshToken: string; expiresIn: number }>('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }),
+  logout: () => request<{ success: boolean; message: string }>('/auth/logout', { method: 'POST' }),
   getProfile: () => request<any>('/auth/me'),
 
   // Products
