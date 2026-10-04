@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0-phase7] — Phase 7: Cloud Run Deployment (2026-10-04)
+
+### Added
+* Cloud Run services `shopcloud-api` and `shopcloud-web` in `asia-south1` (scale to zero, max 2 instances, request-based CPU, HTTP startup/liveness probes), deployed by image digest
+* `Build & Push Images` workflow: builds API and web images in GitHub Actions and pushes them to Artifact Registry through Workload Identity Federation (`phase7-<sha>` and full-SHA tags, no `latest`); deployment stays manual until Phase 12
+* `shopcloud-web-runtime` service account with no roles; API runs as `shopcloud-api-runtime`
+* `JWT_ACCESS_SECRET` served from Secret Manager (`shopcloud-dev-jwt-access-secret:2`, value generated directly into Secret Manager)
+* `docs/gcp/cloud-run.md` (services, URLs, images, IAM, secrets, probes, scaling, rollback, limitations) and Phase 7 validation results
+
+### Fixed
+* API image crashed on start (`Cannot find module 'dotenv'`): runtime stages now copy workspace-local `node_modules`; CI smoke-tests the API image in production mode without a database
+* `/api/v1/health` reported every dependency "healthy" without checking; it now runs a real `SELECT 1` with latency, marks unprobed dependencies as such, and returns 503 only when PostgreSQL is down
+* Admin dashboard health cards render reported status instead of hardcoded green values
+* README CI badge pointed at a placeholder repository
+
+### Deferred
+* Database-backed functionality (catalog, sign-in, cart, orders, admin) returns `503 DATABASE_UNAVAILABLE` until Cloud SQL (Phase 8)
+* Worker service (Phase 10, Pub/Sub push)
+
+---
+
 ## [0.6.0-phase6] — Phase 6: GCP Foundation & Platform Baseline (2026-10-04)
 
 ### Added

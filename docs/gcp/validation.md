@@ -61,3 +61,76 @@ Nothing is inferred.
 | 37192436373 | GCP WIF Check (least-privilege checks) | success — 200 / 403 / 403 |
 
 CD remains intentionally unconfigured (its secrets are unset until Phase 12 — see [iam.md §5](iam.md#5-values-for-the-cd-workflow-phase-12)).
+
+## Phase 7 — Cloud Run
+
+Captured 2026-10-04 against the live services. Nothing below is simulated.
+
+### Images (Artifact Registry)
+
+| Image | Tags | Digest | Built by |
+| --- | --- | --- | --- |
+| `asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/api` | `phase7-0fb8b77`, `0fb8b77d…` | `sha256:912f4fd1e8abeca2968be924b3218d8f922a3ff412bc59fbadcfbf7fdbe8cc0b` | `Build & Push Images` run `37194645042` (WIF) |
+| `asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/web` | `phase7-0fb8b77`, `0fb8b77d…` | `sha256:9864c076b5cadf64161de1a1980480906944708594fa5e8fe046730a09d1b988` | same run |
+| (superseded) api / web | `phase7-60322be` | `sha256:74fb1997…` / `sha256:3e9a0b12…` | run `37194023120` — API image crashed on start (`dotenv` not copied) |
+
+Verified with `gcloud artifacts docker images list … --include-tags` and `gcloud artifacts docker images describe`.
+
+### Deployment
+
+| Check | Result | Status |
+| --- | --- | --- |
+| `run.googleapis.com` enabled | yes; Google also auto-enabled `containerregistry` and `pubsub` as Cloud Run dependencies — 0 Pub/Sub topics, 0 subscriptions exist | **PASS** |
+| API revision serving | `shopcloud-api-00004-rmg` 100 % | **PASS** |
+| Web revision serving | `shopcloud-web-00001-62k` 100 % | **PASS** |
+| Container honours `PORT` | API log `listening on http://0.0.0.0:8080`; web `listen ${PORT}` → 8080 | **PASS** |
+| Rollback | traffic → `00003-dgn` (liveness 200) → latest `00004-rmg` (liveness 200) | **PASS** |
+| CI container smoke test | API (production mode, no DB), web and worker images healthy on `PORT=8080` — CI run `37194645035` | **PASS** |
+
+### API smoke test — https://shopcloud-api-24903284190.asia-south1.run.app
+
+| Request | Expected | Actual | Status |
+| --- | --- | --- | --- |
+| `GET /api/v1/health/liveness` | 200 | 200 `{"status":"UP"}` | **PASS** |
+| `GET /api/v1/health` | 503 until Phase 8 | 503, `database: unhealthy, "PostgreSQL unreachable"` | **PASS** (honest) |
+| `GET /api/v1/products` | 503 (no DB) | 503 `DATABASE_UNAVAILABLE` | **DEFERRED TO PHASE 8** |
+| `POST /api/v1/auth/login` (demo credentials) | 503 (no DB, no demo fallback) | 503 | **DEFERRED TO PHASE 8** |
+| `GET /api/v1/cart`, `/orders`, `/auth/me`, `/admin/dashboard` — no token | 401 | 401 ×4 | **PASS** |
+| `GET /api/v1/cart` with a forged JWT | 401 | 401 | **PASS** |
+| `GET /api/v1/cart` with `x-user-id: usr-admin-demo` | 401 | 401 | **PASS** |
+| Authenticated request | 200 | not possible without users in a database | **DEFERRED TO PHASE 8** |
+| CORS from `https://evil.example` | no `Access-Control-Allow-Origin` | none | **PASS** |
+| `http://` | redirect to HTTPS | 302 → `https://…` | **PASS** |
+| `GET /api/docs` | 200 | 200 | **PASS** |
+
+### Web smoke test — https://shopcloud-web-24903284190.asia-south1.run.app
+
+| Request | Actual | Status |
+| --- | --- | --- |
+| `GET /` | 200, title "ShopCloud — Cloud-Native Event-Driven E-Commerce" | **PASS** |
+| `GET /orders` (SPA deep link) | 200, `index.html` with `#root` | **PASS** |
+| `GET /health` | 200 `{"status":"UP","service":"shopcloud-web"}` | **PASS** |
+| `GET /assets/index-*.js` | 200, `Cache-Control: public, max-age=31536000, immutable` | **PASS** |
+| `GET /api/v1/health/liveness` via web proxy | 200 `{"status":"UP"}` (nginx → API over HTTPS with Host/SNI) | **PASS** |
+| `GET /api/v1/products` / `/cart` via proxy | 503 / 401 (API responses passed through) | **PASS** (DB deferred) |
+| Bundle: `localhost` / `127.0.0.1` | 0 occurrences | **PASS** |
+| Bundle: `http://` URLs other than XML namespaces | 0 | **PASS** |
+| Browser console | only expected 503/401 from DB-backed calls; no mixed-content warnings | **PASS** |
+| Security headers | `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` | **PASS** |
+| `http://` | 302 → HTTPS | **PASS** |
+
+### Security & logging
+
+| Check | Result | Status |
+| --- | --- | --- |
+| Runtime identities | api → `shopcloud-api-runtime`, web → `shopcloud-web-runtime` (no roles) | **PASS** |
+| Project-level roles | owner + Google service agents only; default compute SA has none (org policy) | **PASS** |
+| Secrets | `JWT_ACCESS_SECRET` from Secret Manager `:2`; no secret in env literals, images, git, YAML or docs | **PASS** |
+| Non-root | API image `USER node`; nginx master runs as root (documented, acceptable on Cloud Run) | **PASS** |
+| Cloud Logging | request, stdout/stderr and system logs for both services | **PASS** |
+| Sensitive data in logs | 0 matches for JWTs, passwords, `Authorization`, secret names with values, `postgresql://` | **PASS** |
+
+### Application tests (local, Phase 7 branch)
+
+`npm run build` ✅ · `npm test`: API **105/105** (12 suites), worker **6/6**, `@shopcloud/database` integration suite ✅ ·
+`tsc --noEmit` ✅ · Docker: **NOT AVAILABLE** locally (built and smoke-tested in CI).
