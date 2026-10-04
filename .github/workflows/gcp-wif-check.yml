@@ -28,6 +28,8 @@ jobs:
           service_account: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
           token_format: access_token
           access_token_lifetime: 300s
+          # userinfo.email lets tokeninfo report which identity the token belongs to
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/userinfo.email
 
       - name: Verify impersonated identity
         env:
