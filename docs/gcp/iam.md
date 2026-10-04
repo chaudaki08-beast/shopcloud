@@ -14,25 +14,27 @@
 
 | Service account | Purpose | Roles today | User-managed keys |
 | --- | --- | --- | --- |
-| `shopcloud-api-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run API runtime (Phase 7) | **none** | 0 |
-| `shopcloud-worker-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run worker runtime (Phase 7) | **none** | 0 |
-| `shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | GitHub Actions deployment identity | **none** at project level; impersonable only via WIF (below) | 0 |
+| `shopcloud-api-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run API runtime (Phase 7) | none at project level; `secretAccessor` on `shopcloud-dev-jwt-access-secret`, `shopcloud-dev-jwt-refresh-secret`, `shopcloud-dev-database-url` | 0 |
+| `shopcloud-worker-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run worker runtime (Phase 7) | none at project level; `secretAccessor` on `shopcloud-dev-database-url` | 0 |
+| `shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | GitHub Actions deployment identity | none at project level; `artifactregistry.writer` on repository `shopcloud`; impersonable only via WIF (below) | 0 |
 
 Each account has exactly one Google-managed `SYSTEM_MANAGED` key (created automatically by GCP, not downloadable).
 
-Project-level IAM policy after Phase 6 (unchanged by this phase):
+Project-level IAM policy after Phase 6 — no ShopCloud identity holds a project-level role:
 
 ```
-roles/owner   user:chaudaki08@gmail.com
+roles/owner                          user:chaudaki08@gmail.com
+roles/artifactregistry.serviceAgent  serviceAccount:service-24903284190@gcp-sa-artifactregistry.iam.gserviceaccount.com   # Google-managed, added when the API was enabled
 ```
 
 ## 3. Planned least-privilege grants (future phases)
 
 | Phase | Identity | Role | Scope |
 | --- | --- | --- | --- |
-| 7 | api-runtime, worker-runtime | `roles/secretmanager.secretAccessor` | each **individual secret** it reads |
+| 6 ✅ | api-runtime | `roles/secretmanager.secretAccessor` | `shopcloud-dev-jwt-access-secret`, `shopcloud-dev-jwt-refresh-secret`, `shopcloud-dev-database-url` |
+| 6 ✅ | worker-runtime | `roles/secretmanager.secretAccessor` | `shopcloud-dev-database-url` |
+| 6 ✅ | github-deployer | `roles/artifactregistry.writer` | repository `shopcloud` only |
 | 7 | api-runtime, worker-runtime | `roles/logging.logWriter`, `roles/monitoring.metricWriter`, `roles/cloudtrace.agent` | project (write-only telemetry) |
-| 7 / 12 | github-deployer | `roles/artifactregistry.writer` | repository `shopcloud` only |
 | 7 / 12 | github-deployer | `roles/run.developer` | the ShopCloud Cloud Run services |
 | 7 / 12 | github-deployer | `roles/iam.serviceAccountUser` | **on** api-runtime and worker-runtime only (to deploy as them) |
 | 8 | api-runtime, worker-runtime | `roles/cloudsql.client` (+ `roles/cloudsql.instanceUser` if IAM DB auth) | project / instance |
@@ -79,18 +81,20 @@ at the STS exchange by the provider condition, before any service-account bindin
 
 **Validation: PASS.** The read-only workflow `.github/workflows/gcp-wif-check.yml` authenticated through the provider,
 impersonated the deployer, and confirmed the token identity with Google's `tokeninfo` endpoint
-(`Token issued for: shopcloud-github-deployer@…`), run `37189323203`. The audit log shows the matching
+(`Token issued for: shopcloud-github-deployer@…`), run `37189323203`. It also proves least privilege on every run
+(run `37192436373`): reading repository `shopcloud` → **200**, reading secret `shopcloud-dev-jwt-access-secret` → **403**,
+reading the project IAM policy → **403**. The audit log shows the matching
 `GenerateAccessToken` call. A negative test from a different repository was not executed; rejection relies on the
 provider condition above.
 
 **Phase 12 hardening (DEFERRED):** today any workflow in this repository (any branch) can impersonate the deployer —
-acceptable because the deployer holds no permissions yet. Before granting deploy roles, restrict the binding to
+acceptable while its only permission is pushing images to its own registry. Before granting deploy roles, restrict the binding to
 `attribute.ref/refs/heads/main` (or a GitHub Environment with required reviewers) so feature branches cannot deploy.
 
 ## 5. Values for the CD workflow (Phase 12)
 
 `deploy.yml` reads three repository secrets. They are **intentionally not set yet**: setting them would make the CD
-preflight report "configured" and attempt a deployment that cannot succeed (no Artifact Registry, no Cloud Run).
+preflight report "configured" and attempt a deployment that cannot succeed (no Cloud Run services until Phase 7).
 
 | Secret | Value to set in Phase 12 (identifiers, not credentials) |
 | --- | --- |

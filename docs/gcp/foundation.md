@@ -10,8 +10,8 @@
 | Parent | organization `842968716907` | `gcloud projects describe` |
 | Owner | `user:chaudaki08@gmail.com` (`roles/owner`, only project-level binding) | `gcloud projects get-iam-policy` |
 | Labels | `project=shopcloud`, `environment=dev`, `owner=shopcloud`, `managed-by=gcloud` | `gcloud alpha projects update --update-labels` |
-| Billing | **disabled** — billing account `01580E-E37F69-97296D` is closed | `gcloud billing projects describe` |
-| Local gcloud configuration | `shopcloud` (separate from the `default` configuration used for other work) | `gcloud config configurations list` |
+| Billing | **enabled** — `billingAccounts/019096-A2B4E0-C3697C` ("My Billing Account 1", INR). The original account `01580E-E37F69-97296D` is closed | `gcloud billing projects describe` |
+| Local gcloud configuration | `shopcloud` (separate from the `default` configuration used for other work); `billing/quota_project` = this project | `gcloud config configurations list` |
 
 **Why this project:** the account hit its project-creation quota (`gcloud projects create` failed with
 *"exceeded your allotted project quota"*), so the unused "My First Project" was adopted, renamed and labelled.
@@ -31,7 +31,7 @@ Cloud Run, Cloud SQL, buckets) must use `asia-south1`; IAM and WIF are global.
 | --- | --- | --- |
 | `dev` | `project-c3f386b1-6c37-468d-8ee` | **Active** — the only environment for the portfolio build |
 | `staging` | Same project, resources suffixed `-staging` | **DEFERRED** — create only if a later phase needs it |
-| `prod` | Separate project recommended (blast-radius + IAM isolation) | **DEFERRED** — blocked by project quota and billing |
+| `prod` | Separate project recommended (blast-radius + IAM isolation) | **DEFERRED** — blocked by the account's project-creation quota |
 
 Environment is carried in every resource name suffix and in the `environment` label, so a later split into
 per-environment projects (Phase 13, Terraform) is a move, not a rename.
@@ -47,9 +47,10 @@ per-environment projects (Phase 13, Terraform) is a move, not a rename.
 | `serviceusage.googleapis.com` | **ALREADY ENABLED** | Default |
 | `logging.googleapis.com` | **ALREADY ENABLED** | Default |
 | `monitoring.googleapis.com` | **ALREADY ENABLED** | Default |
-| `artifactregistry.googleapis.com` | **MANUAL ACTION REQUIRED** | `FAILED_PRECONDITION: Billing must be enabled` |
-| `secretmanager.googleapis.com` | **MANUAL ACTION REQUIRED** | `FAILED_PRECONDITION: Billing must be enabled` |
-| `billingbudgets.googleapis.com` | **MANUAL ACTION REQUIRED** | Needed for budget alerts once billing is open |
+| `artifactregistry.googleapis.com` | **ENABLED** (Phase 6, after billing) | Container image registry |
+| `secretmanager.googleapis.com` | **ENABLED** (Phase 6, after billing) | Secret containers and per-secret IAM |
+| `cloudbilling.googleapis.com` | **ENABLED** (Phase 6) | Billing checks billed to this project (the shared gcloud client project hit `RESOURCE_EXHAUSTED`) |
+| `billingbudgets.googleapis.com` | **ENABLED** (Phase 6) | Budget alert |
 | `run.googleapis.com` | **DEFERRED** (Phase 7) | Not enabled |
 | `sqladmin.googleapis.com` | **DEFERRED** (Phase 8) | Not enabled |
 | `pubsub.googleapis.com` | **DEFERRED** (Phase 10) | Not enabled |
@@ -59,7 +60,7 @@ per-environment projects (Phase 13, Terraform) is a move, not a rename.
 Other Google defaults on the project (BigQuery family, Dataform, Dataplex, Datastore, Cloud Trace, etc.) were
 left untouched; they cost nothing while unused. Disabling them is optional cleanup.
 
-## 5. Artifact Registry (designed — blocked by billing)
+## 5. Artifact Registry
 
 | Field | Value |
 | --- | --- |
@@ -67,7 +68,10 @@ left untouched; they cost nothing while unused. Disabling them is optional clean
 | Format | Docker |
 | Location | `asia-south1` |
 | Host path | `asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud` |
-| Status | **MANUAL ACTION REQUIRED** — API cannot be enabled without billing; repository **not created** |
+| Labels | `project=shopcloud`, `environment=dev`, `component=registry`, `owner=shopcloud`, `managed-by=gcloud` |
+| Encryption | Google-managed key |
+| Contents | **empty** — no images pushed in Phase 6 |
+| Status | **PASS** |
 
 Image naming (one image per deployable, tagged by immutable git SHA, plus a moving `latest` for dev only):
 
@@ -79,20 +83,26 @@ asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/worker:<git-
 
 Note for Phase 12: `deploy.yml` currently pushes `workers` (plural) — align to `worker`.
 
-Command to run once billing is open:
+Access: `roles/artifactregistry.writer` for `shopcloud-github-deployer` **on this repository only** (verified from
+GitHub Actions: repository read → 200). Runtime identities need no registry role — Cloud Run pulls with its own
+service agent within the same project.
+
+Cleanup policy (active, not dry-run) — keep rules override delete rules:
+
+| Rule | Action | Condition |
+| --- | --- | --- |
+| `keep-latest-10` | KEEP | 10 most recent versions per image |
+| `delete-untagged-7d` | DELETE | untagged, older than 7 days |
+| `delete-older-30d` | DELETE | any version older than 30 days (unless kept above) |
+
+Commands used:
 
 ```bash
 gcloud services enable artifactregistry.googleapis.com
-gcloud artifacts repositories create shopcloud --repository-format=docker --location=asia-south1 \
-  --description="ShopCloud container images (api, web, worker)" \
-  --labels=project=shopcloud,environment=dev,owner=shopcloud,managed-by=gcloud
-# Grant the deployer push rights on THIS repository only (see iam.md)
-gcloud artifacts repositories add-iam-policy-binding shopcloud --location=asia-south1 \
-  --member="serviceAccount:shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com" \
-  --role=roles/artifactregistry.writer
+gcloud artifacts repositories create shopcloud --repository-format=docker --location=asia-south1   --description="ShopCloud container images (api, web, worker)"   --labels=project=shopcloud,environment=dev,component=registry,owner=shopcloud,managed-by=gcloud
+gcloud artifacts repositories set-cleanup-policies shopcloud --location=asia-south1 --policy=ar-cleanup.json --no-dry-run
+gcloud artifacts repositories add-iam-policy-binding shopcloud --location=asia-south1   --member="serviceAccount:shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com"   --role=roles/artifactregistry.writer
 ```
-
-Cleanup policy (cost control): keep the 10 most recent SHA tags per image, delete untagged images older than 7 days.
 
 ## 6. Naming & labels
 
@@ -252,7 +262,8 @@ enabled services, and project labels. After import, set `managed-by=terraform`.
 
 ## 11. Cost control
 
-Current cost: **$0** — billing is disabled, and every Phase 6 resource (service accounts, WIF, enabled APIs) is free.
+Expected cost of Phase 6: **≈ ₹0/month** — an empty Artifact Registry repository, secret containers with no versions,
+service accounts, WIF and enabled APIs are all free or within free tiers.
 
 | Area | Strategy |
 | --- | --- |
@@ -265,4 +276,4 @@ Current cost: **$0** — billing is disabled, and every Phase 6 resource (servic
 | Logging | Keep 30-day default retention; exclude health-check noise; no sinks to BigQuery |
 | Monitoring | Built-in metrics only; few custom/log-based metrics |
 | Idle defaults | Unused default APIs (BigQuery, Dataform, …) incur no cost; nothing always-on exists |
-| Budget alerts | **MANUAL ACTION REQUIRED** — none exist (cannot be created on a closed billing account). Create a budget (e.g. ₹500/month) with 50/90/100 % email alerts as soon as billing is open |
+| Budget alerts | **PASS** — `shopcloud-dev-monthly`: ₹500/month, calendar month, project-scoped, email alerts at 50/90/100 % of actual spend. Alerts only; it does not cap spending |
