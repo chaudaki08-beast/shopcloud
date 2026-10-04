@@ -2,19 +2,28 @@
 
 ## 1. Secret Manager strategy
 
-**Status: MANUAL ACTION REQUIRED** — `secretmanager.googleapis.com` cannot be enabled until billing is open
-(`FAILED_PRECONDITION: Billing must be enabled`). No secrets — real or placeholder — exist in GCP.
+**Status: PASS** — `secretmanager.googleapis.com` is enabled. Three secret **containers** exist with labels,
+`asia-south1` user-managed replication and per-secret IAM, but **no versions**: no value — real or placeholder — is
+stored in GCP or in this repository. Values are added out-of-band by the owner in Phase 7/8.
+
+| Secret (created) | Versions | Accessors |
+| --- | --- | --- |
+| `shopcloud-dev-jwt-access-secret` | 0 | `shopcloud-api-runtime` |
+| `shopcloud-dev-jwt-refresh-secret` | 0 | `shopcloud-api-runtime` |
+| `shopcloud-dev-database-url` | 0 | `shopcloud-api-runtime`, `shopcloud-worker-runtime` |
+
+The deployer has no Secret Manager access (verified: 403 from GitHub Actions).
 
 ### Naming
 
 Secret Manager IDs may only contain letters, digits, `-` and `_` (no `/`), so the hierarchical form
 `shopcloud/<env>/<name>` is expressed as **`shopcloud-<env>-<name>`**:
 
-| Secret ID | Consumer | Introduced |
+| Secret ID | Consumer | Created |
 | --- | --- | --- |
-| `shopcloud-dev-database-url` | api-runtime, worker-runtime, migrator | Phase 8 |
-| `shopcloud-dev-jwt-access-secret` | api-runtime | Phase 7 |
-| `shopcloud-dev-jwt-refresh-secret` | api-runtime | Phase 7 |
+| `shopcloud-dev-database-url` | api-runtime, worker-runtime, migrator (Phase 8) | Phase 6 (container only) |
+| `shopcloud-dev-jwt-access-secret` | api-runtime | Phase 6 (container only) |
+| `shopcloud-dev-jwt-refresh-secret` | api-runtime | Phase 6 (container only) |
 | `shopcloud-dev-payment-secret-key` | api-runtime | Phase 11 |
 | `shopcloud-dev-payment-webhook-secret` | api-runtime | Phase 11 |
 
@@ -29,7 +38,7 @@ Replication: user-managed, `asia-south1` only (data residency + region consisten
   so a rotation is an explicit, reviewable deployment.
 - Values are created out-of-band by the owner (`gcloud secrets versions add … --data-file=-`), never from files in the repo.
 - The application must refuse to start in production when a required secret is missing
-  (today it falls back to a hardcoded JWT secret — see [foundation.md §9, issue 2](foundation.md#9-cloud-run-readiness-review)).
+  (implemented: the API refuses to boot without `JWT_ACCESS_SECRET` — [foundation.md §9, issue 2](foundation.md#9-cloud-run-readiness-review)).
 
 ## 2. Credential policy
 

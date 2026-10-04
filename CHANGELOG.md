@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.6.0-phase6] — Phase 6: GCP Foundation & Platform Baseline (2026-10-04)
+
+### Added
+* GCP project `project-c3f386b1-6c37-468d-8ee` ("ShopCloud Dev", region `asia-south1`) with billing, labels and a ₹500/month budget alert
+* Foundation APIs only: IAM, IAM Credentials, STS, Resource Manager, Artifact Registry, Secret Manager, Cloud Billing, Budgets (Cloud Run, Cloud SQL, Pub/Sub and GKE deferred)
+* Artifact Registry Docker repository `shopcloud` with cleanup policy (keep 10 latest, delete untagged > 7 d, delete > 30 d)
+* Service accounts `shopcloud-api-runtime`, `shopcloud-worker-runtime`, `shopcloud-github-deployer` with no project-level roles; resource-scoped grants only
+* Workload Identity Federation (`shopcloud-github-pool` / `github-actions`) restricted to this repository's numeric IDs — no service-account keys
+* Secret Manager containers (no values) with per-secret accessor bindings
+* `GCP WIF Check` workflow proving keyless authentication and deployer least privilege (200 / 403 / 403)
+* GCP documentation in `docs/gcp/` (foundation, IAM, security, validation)
+
+### CI/CD
+* CI fixed after failing since Phase 1 (`@shopcloud/database` was never built); now runs migrations, seed and the full test suite against PostgreSQL, builds all images and smoke-tests containers on `PORT=8080`
+* CD runs only after successful CI on `main` and skips deployment with a clear notice until GCP secrets are configured
 
 ### Security
 * Production (`NODE_ENV=production`) no longer accepts the hardcoded demo logins or demo JWT subjects, no longer issues tokens when refresh-token storage fails, and no longer serves in-memory demo data when PostgreSQL fails (503 instead)
