@@ -14,6 +14,27 @@ import {
   Cpu,
 } from 'lucide-react';
 
+// Cards reflect /api/v1/health as reported; nothing is assumed healthy.
+const HEALTH_CARDS: {
+  key: keyof HealthStatusDto['services'];
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  iconClass: string;
+}[] = [
+  { key: 'api', label: 'API (Cloud Run)', Icon: Server, iconClass: 'text-blue-400' },
+  { key: 'database', label: 'PostgreSQL', Icon: Database, iconClass: 'text-emerald-400' },
+  { key: 'pubsub', label: 'Pub/Sub', Icon: Radio, iconClass: 'text-purple-400' },
+  { key: 'workers', label: 'Event Workers', Icon: Cpu, iconClass: 'text-amber-400' },
+  { key: 'storage', label: 'Cloud Storage', Icon: HardDrive, iconClass: 'text-cyan-400' },
+];
+
+const STATUS_DOT: Record<string, string> = {
+  healthy: 'bg-emerald-500',
+  degraded: 'bg-amber-400',
+  unhealthy: 'bg-red-500',
+  unknown: 'bg-slate-500',
+};
+
 export const AdminDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<any>(null);
   const [health, setHealth] = useState<HealthStatusDto | null>(null);
@@ -125,57 +146,31 @@ export const AdminDashboard: React.FC = () => {
             <h3 className="text-base font-semibold text-white">GCP System Health & Telemetry</h3>
           </div>
           <div className="text-xs text-slate-400">
-            Uptime: {health?.uptimeSeconds || 3600}s &bull; Memory: {health?.metrics?.memoryUsageMb || 64} MB
+            Uptime: {health ? `${health.uptimeSeconds}s` : '—'} &bull; Memory: {health?.metrics ? `${health.metrics.memoryUsageMb} MB` : '—'}
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
-          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
-            <div className="flex items-center justify-between mb-2">
-              <Server className="w-4 h-4 text-blue-400" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <div className="text-xs text-slate-400">API Gateway</div>
-            <div className="text-sm font-semibold text-white">Cloud Run &bull; Healthy</div>
-          </div>
-
-          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
-            <div className="flex items-center justify-between mb-2">
-              <Database className="w-4 h-4 text-emerald-400" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <div className="text-xs text-slate-400">Cloud SQL (PG 16)</div>
-            <div className="text-sm font-semibold text-white">
-              {health?.services.database.latencyMs ? `${health.services.database.latencyMs}ms` : 'Healthy'}
-            </div>
-          </div>
-
-          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
-            <div className="flex items-center justify-between mb-2">
-              <Radio className="w-4 h-4 text-purple-400" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <div className="text-xs text-slate-400">Cloud Pub/Sub</div>
-            <div className="text-sm font-semibold text-white">0 Backlog</div>
-          </div>
-
-          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
-            <div className="flex items-center justify-between mb-2">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <div className="text-xs text-slate-400">Event Workers</div>
-            <div className="text-sm font-semibold text-white">3 Active Listeners</div>
-          </div>
-
-          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
-            <div className="flex items-center justify-between mb-2">
-              <HardDrive className="w-4 h-4 text-cyan-400" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <div className="text-xs text-slate-400">Cloud Storage</div>
-            <div className="text-sm font-semibold text-white">Multi-Region GCS</div>
-          </div>
+          {HEALTH_CARDS.map(({ key, label, Icon, iconClass }) => {
+            const service = health?.services[key];
+            return (
+              <div key={key} className="bg-slate-800/80 p-4 rounded-xl border border-slate-700/60">
+                <div className="flex items-center justify-between mb-2">
+                  <Icon className={`w-4 h-4 ${iconClass}`} />
+                  <span className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[service?.status ?? 'unknown']}`} />
+                </div>
+                <div className="text-xs text-slate-400">{label}</div>
+                <div className="text-sm font-semibold text-white">
+                  {service
+                    ? service.latencyMs !== undefined
+                      ? `${service.status} • ${service.latencyMs}ms`
+                      : service.status
+                    : 'Unavailable'}
+                </div>
+                {service?.message && <div className="text-[11px] text-slate-400 mt-1">{service.message}</div>}
+              </div>
+            );
+          })}
         </div>
       </div>
 

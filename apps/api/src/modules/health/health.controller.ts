@@ -9,7 +9,8 @@ export class HealthController {
   @Get()
   async getHealth(@Res() res: Response) {
     const health = await this.healthService.getHealthStatus();
-    const statusCode = health.status === 'healthy' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+    // Degraded (e.g. local demo data) still serves traffic; only unhealthy is not ready.
+    const statusCode = health.status === 'unhealthy' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
     return res.status(statusCode).json(health);
   }
 
