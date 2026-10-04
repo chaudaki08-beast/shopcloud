@@ -7,7 +7,8 @@ import { prisma } from '@shopcloud/database';
 import { CategoryDto } from '@shopcloud/contracts';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { isDatabaseOnline } from '../../db-status';
+import { useDatabase } from '../../db-status';
+import { rethrowInProduction } from '../../common/runtime-mode';
 
 const SEED_CATEGORIES: CategoryDto[] = [
   {
@@ -44,7 +45,7 @@ export class CategoriesService {
   private localCategories: CategoryDto[] = [...SEED_CATEGORIES];
 
   async findAll(): Promise<CategoryDto[]> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const categories = await prisma.category.findMany({
           orderBy: { name: 'asc' },
@@ -52,7 +53,8 @@ export class CategoriesService {
         if (categories && categories.length > 0) {
           return categories.map((c) => this.formatCategory(c));
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback to localCategories
       }
     }
@@ -60,7 +62,7 @@ export class CategoriesService {
   }
 
   async findById(id: string): Promise<CategoryDto> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const category = await prisma.category.findFirst({
           where: {
@@ -70,7 +72,8 @@ export class CategoriesService {
         if (category) {
           return this.formatCategory(category);
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -85,7 +88,7 @@ export class CategoriesService {
   async create(dto: CreateCategoryDto): Promise<CategoryDto> {
     const slug = dto.slug || this.slugify(dto.name);
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const existing = await prisma.category.findUnique({ where: { slug } });
         if (existing) {
@@ -102,6 +105,7 @@ export class CategoriesService {
         });
         return this.formatCategory(created);
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof ConflictException) throw err;
       }
     }
@@ -131,7 +135,7 @@ export class CategoriesService {
 
     const slug = dto.slug ? this.slugify(dto.slug) : undefined;
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         if (slug) {
           const conflict = await prisma.category.findFirst({
@@ -153,6 +157,7 @@ export class CategoriesService {
         });
         return this.formatCategory(updated);
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof ConflictException) throw err;
       }
     }
@@ -184,7 +189,7 @@ export class CategoriesService {
   async remove(id: string): Promise<{ success: boolean; message: string }> {
     const category = await this.findById(id);
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const productCount = await prisma.product.count({
           where: { categoryId: category.id },
@@ -198,6 +203,7 @@ export class CategoriesService {
         await prisma.category.delete({ where: { id: category.id } });
         return { success: true, message: `Category '${category.name}' deleted successfully` };
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof ConflictException) throw err;
       }
     }

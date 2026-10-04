@@ -24,6 +24,13 @@ coverage
 .env.*
 !.env.example
 !.env.docker.example
+gha-creds-*.json
+*-sa-key.json
+*service-account*.json
+application_default_credentials.json
+credentials.json
+*.pem
+*.p12
 
 # Local Database Files & Logs
 .pgdata

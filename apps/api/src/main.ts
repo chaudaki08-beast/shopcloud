@@ -7,6 +7,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { buildCorsOptions } from './common/cors';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -15,12 +16,8 @@ async function bootstrap() {
   // Enable graceful shutdown for Cloud Run SIGTERM/SIGINT signals
   app.enableShutdownHooks();
 
-  // Enable CORS
-  app.enableCors({
-    origin: '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
-  });
+  // CORS allowlist from CORS_ORIGIN (see common/cors.ts)
+  app.enableCors(buildCorsOptions());
 
   // Global prefix for all REST endpoints
   app.setGlobalPrefix('api/v1');

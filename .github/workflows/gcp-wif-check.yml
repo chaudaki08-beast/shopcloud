@@ -1,0 +1,60 @@
+name: GCP WIF Check
+
+# Read-only proof that GitHub Actions can authenticate to GCP through Workload Identity Federation
+# (no JSON keys) and impersonate the deployer service account. Deploys nothing.
+# Identifiers below are resource names, not secrets. See docs/gcp/iam.md.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/gcp-wif-check.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  wif:
+    name: Authenticate via Workload Identity Federation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/24903284190/locations/global/workloadIdentityPools/shopcloud-github-pool/providers/github-actions
+          service_account: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 300s
+          # userinfo.email lets tokeninfo report which identity the token belongs to
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/userinfo.email
+
+      - name: Verify impersonated identity
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          EXPECTED: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
+        run: |
+          email=$(curl -sf --data-urlencode "access_token=${ACCESS_TOKEN}" https://oauth2.googleapis.com/tokeninfo | jq -r '.email')
+          echo "Token issued for: ${email}"
+          test "${email}" = "${EXPECTED}"
+
+      # Least-privilege proof: the deployer may use its own registry and nothing else.
+      - name: Verify deployer permissions
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          PROJECT: project-c3f386b1-6c37-468d-8ee
+        run: |
+          status() { curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${ACCESS_TOKEN}" "$@"; }
+          expect() {
+            if [ "$2" = "$3" ]; then echo "PASS  $1 -> HTTP $2"; else echo "FAIL  $1 -> HTTP $2 (expected $3)"; failed=1; fi
+          }
+          failed=0
+          expect "read Artifact Registry repository shopcloud (allowed)" \
+            "$(status "https://artifactregistry.googleapis.com/v1/projects/${PROJECT}/locations/asia-south1/repositories/shopcloud")" 200
+          expect "read secret shopcloud-dev-jwt-access-secret (denied)" \
+            "$(status "https://secretmanager.googleapis.com/v1/projects/${PROJECT}/secrets/shopcloud-dev-jwt-access-secret")" 403
+          expect "read project IAM policy (denied)" \
+            "$(status -X POST "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:getIamPolicy")" 403
+          exit "${failed}"

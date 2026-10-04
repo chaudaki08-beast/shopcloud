@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
@@ -29,7 +30,9 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   private extractUserId(req: any): string {
-    return req.user?.id || req.headers?.['x-user-id'] || 'user-customer';
+    // Identity comes only from the verified JWT (JwtAuthGuard); never from client-supplied headers.
+    if (!req.user?.id) throw new UnauthorizedException('Authentication required');
+    return req.user.id;
   }
 
   @Post()

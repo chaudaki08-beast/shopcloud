@@ -17,6 +17,7 @@ import {
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { PermissionsService } from './permissions.service';
+import { offlineFallbackEnabled, rethrowInProduction } from '../../common/runtime-mode';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRATION_SECONDS = 900; // 15 minutes
@@ -73,6 +74,7 @@ export class AuthService {
       if (err instanceof ConflictException || err instanceof BadRequestException) {
         throw err;
       }
+      rethrowInProduction(err);
 
       // Offline unit test mock fallback
       const mockUser = {
@@ -143,11 +145,12 @@ export class AuthService {
       }
     } catch (err: any) {
       if (err instanceof UnauthorizedException) throw err;
+      rethrowInProduction(err);
       // Database offline fallback for unit tests
     }
 
-    // Deterministic Development / Test Demo Fallbacks
-    if (email === 'admin@shopcloud.dev' && dto.password === 'Password123!') {
+    // Deterministic Development / Test Demo Fallbacks (never in production: these would bypass the user table)
+    if (offlineFallbackEnabled() && email === 'admin@shopcloud.dev' && dto.password === 'Password123!') {
       return await this.createAuthTokens({
         id: 'usr-admin-demo',
         email: 'admin@shopcloud.dev',
@@ -159,7 +162,7 @@ export class AuthService {
       });
     }
 
-    if (email === 'customer@shopcloud.dev' && dto.password === 'Password123!') {
+    if (offlineFallbackEnabled() && email === 'customer@shopcloud.dev' && dto.password === 'Password123!') {
       return await this.createAuthTokens({
         id: 'usr-customer-demo',
         email: 'customer@shopcloud.dev',
@@ -171,7 +174,7 @@ export class AuthService {
       });
     }
 
-    if (email === 'inventory@shopcloud.dev' && dto.password === 'Password123!') {
+    if (offlineFallbackEnabled() && email === 'inventory@shopcloud.dev' && dto.password === 'Password123!') {
       return await this.createAuthTokens({
         id: 'usr-inventory-demo',
         email: 'inventory@shopcloud.dev',
@@ -309,6 +312,7 @@ export class AuthService {
       };
     } catch (err: any) {
       if (err instanceof UnauthorizedException) throw err;
+      rethrowInProduction(err);
       // Mock fallback in offline tests
       const newTokenId = crypto.randomUUID();
       const newSecret = crypto.randomBytes(32).toString('hex');
@@ -352,7 +356,8 @@ export class AuthService {
       await this.recordAuditLog(userId, 'User', userId, 'LOGOUT', {
         userId,
       });
-    } catch {
+    } catch (err) {
+      rethrowInProduction(err);
       // Offline fallback
     }
 
@@ -387,8 +392,13 @@ export class AuthService {
           updatedAt: user.updatedAt.toISOString(),
         };
       }
-    } catch {
+    } catch (err) {
+      rethrowInProduction(err);
       // Offline fallback
+    }
+
+    if (!offlineFallbackEnabled()) {
+      throw new UnauthorizedException('User account no longer exists');
     }
 
     // Fallback demo user
@@ -438,7 +448,8 @@ export class AuthService {
           expiresAt,
         },
       });
-    } catch {
+    } catch (err) {
+      rethrowInProduction(err);
       // In offline / mock mode
     }
 
