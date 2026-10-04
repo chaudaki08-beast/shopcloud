@@ -17,7 +17,7 @@ Everything below was created or observed with real `gcloud` output on 2026-10-04
 | Cloud Logging | **PASS** | API enabled, `_Default` (30 d) / `_Required` (400 d) buckets, audit entries readable |
 | Cloud Monitoring | **PASS** | API enabled, Monitoring API responds `200`; no dashboards/alerts (Phase 14) |
 | Budget alerts | **MANUAL ACTION REQUIRED** | Requires an open billing account |
-| Cloud Run readiness | **PREPARED** | 6 issues to fix before Phase 7 — see [foundation.md §9](foundation.md#9-cloud-run-readiness-review) |
+| Cloud Run readiness | **PASS** (code) | 6 issues fixed + production auth hardening; runtime config listed in [foundation.md §9](foundation.md#9-cloud-run-readiness-review) |
 | Terraform | **DEFERRED** (Phase 13) | Strategy in [foundation.md §10](foundation.md#10-terraform-strategy) |
 
 ## Documents

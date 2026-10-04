@@ -167,46 +167,66 @@ Metrics to cover in Phase 14:
 
 ## 9. Cloud Run readiness review
 
-Reviewed against the source and Dockerfiles in this commit. **Nothing was deployed.**
-This supersedes the all-green matrix in `docs/docker/cloud-run-compatibility.md`, which missed items 1–6.
+Phase 6 review of the source and Dockerfiles; **nothing was deployed.** The six issues it found were fixed on
+`fix/cloud-run-readiness` (see the table below), with tests and production-mode smoke checks against the built
+API and worker. This supersedes the all-green matrix in `docs/docker/cloud-run-compatibility.md`.
 
 | Check | Result |
 | --- | --- |
-| Dynamic `PORT` — API | ✅ `process.env.PORT \|\| 3000`, binds `0.0.0.0` |
-| Dynamic `PORT` — worker | ❌ **Issue 1** |
-| Dynamic `PORT` — web | ⚠️ nginx listens on fixed `80`; deploy with `--port=80` (Cloud Run sets `PORT=80`) or template the port |
-| SIGTERM | ✅ API `enableShutdownHooks()`, worker traps SIGTERM — ⚠️ neither closes Prisma / Pub/Sub subscription (Issue 6) |
-| Non-root | ✅ `USER node` in API/worker images; nginx image runs master as root (acceptable on Cloud Run; optional `nginx-unprivileged`) |
+| Dynamic `PORT` — API | ✅ `process.env.PORT || 3000`, binds `0.0.0.0` |
+| Dynamic `PORT` — worker | ✅ fixed (issue 1) |
+| Dynamic `PORT` — web | ✅ fixed — nginx listens on `${PORT}` (default 80) |
+| SIGTERM | ✅ API disconnects Prisma; worker closes HTTP server, Pub/Sub subscription and Prisma within 8 s (issue 6) |
+| Non-root | ✅ `USER node` in API/worker images; nginx master runs as root (acceptable on Cloud Run) |
 | Health endpoints | ✅ `/api/v1/health/liveness`, `/api/v1/health` (DB readiness), worker `/health`, web `/health` |
-| stdout/stderr logging | ✅ — but not structured (see §7) |
-| No persistent local filesystem | ✅ no file writes found |
+| stdout/stderr logging | ✅ — not yet structured JSON (see §7, Phase 14) |
+| No persistent local filesystem | ✅ no file writes |
 | Separate API / worker containers | ✅ |
-| Config externalised | ⚠️ mostly — Issue 2 |
-| Statelessness | ❌ **Issues 3, 4** |
+| Config externalised | ✅ secrets fail fast in production (issue 2) |
+| Statelessness | ✅ no per-instance state in production (issue 3) |
 
-**Issues to fix before Phase 7:**
+### Issues found and how they were fixed
 
-1. **Worker listens on the wrong port on Cloud Run.** `Dockerfile.worker` sets `ENV HEALTH_PORT=8081` and the worker
-   uses `HEALTH_PORT || PORT`, so the injected `PORT` is ignored and the startup probe fails.
-   Fix: prefer `PORT` (`PORT || HEALTH_PORT || 8081`).
-2. **Hardcoded JWT fallback secret.** `auth.module.ts` and `jwt.strategy.ts` fall back to
-   `'shopcloud-default-secret-change-me'` when `JWT_ACCESS_SECRET` is missing. In Cloud Run a missing secret
-   binding would silently sign tokens with a public string. Fix: fail fast at boot when `NODE_ENV=production`.
-3. **Per-instance in-memory state.** `AuthRateLimiterGuard` (`new Map`) and the cart service's offline `localCarts`
-   map live in instance memory; with autoscaling, limits and carts diverge per instance and vanish on scale-down.
-   Fix: database-only cart in production; shared store (DB/Redis) or Cloud Armor for rate limiting.
-4. **Worker uses a streaming pull subscription.** Cloud Run throttles CPU outside requests, so a pull subscriber
-   in a request-driven service stalls. Fix (Phase 10): Pub/Sub **push** subscription to an authenticated HTTP
-   endpoint, or `--no-cpu-throttling` with `--min-instances=1` (not free).
-5. **nginx proxies to a Compose-only hostname.** `apps/web/nginx.conf` has `proxy_pass http://api:3000;` with no
-   `resolver`; on Cloud Run nginx will fail to start (`host not found in upstream`). Fix: build-time
-   `VITE_API_URL` pointing at the API service URL, or an env-templated upstream.
-6. **Shutdown does not release resources.** Add `prisma.$disconnect()` on module destroy (API) and close the
-   Pub/Sub subscription before exit (worker). Also: CORS is `origin: '*'` with `credentials: true` — browsers
-   reject that combination; restrict origins via env before exposing the API.
+| # | Issue | Fix |
+| --- | --- | --- |
+| 1 | Worker ignored Cloud Run's `PORT` (`HEALTH_PORT=8081` won) | `resolveHttpPort`: `PORT || HEALTH_PORT || 8081`; Docker `HEALTHCHECK` uses the same order |
+| 2 | Hardcoded JWT fallback secret | `requiredSecret()`: the API refuses to boot in production without `JWT_ACCESS_SECRET` |
+| 3 | Per-instance in-memory state | Production never uses in-memory fallbacks (`useDatabase()` / `rethrowInProduction()` → 503 when the DB fails). Auth rate limiting moved to a shared PostgreSQL fixed-window counter (`AuthRateLimit` table, migration `20261004085326_add_auth_rate_limits`) |
+| 4 | Worker used streaming pull (needs always-on CPU) | `PUBSUB_DELIVERY=push`: Pub/Sub POSTs to `/pubsub/push`; OIDC token verified (audience + push service account), mandatory in production; malformed messages are acked and dropped, handler failures return 500 for retry. Pull stays the local default for the emulator |
+| 5 | nginx `proxy_pass http://api:3000` breaks on Cloud Run | `apps/web/nginx.conf.template` rendered at start: `listen ${PORT}`, upstream `${API_UPSTREAM}` resolved per request via the container's DNS resolver, `Host $proxy_host` + SNI for `*.run.app` |
+| 6 | Shutdown did not release resources; CORS `*` + credentials | API `PrismaShutdownHook`; worker drains with an 8 s cap. CORS from `CORS_ORIGIN` allowlist; `*` rejected in production, unset = same-origin only |
 
-Also note: `apps/workers/src/index.ts` falls back to project `shopcloud-dev` (which does not exist) when
-`GCP_PROJECT_ID` is unset — set `GCP_PROJECT_ID=project-c3f386b1-6c37-468d-8ee` explicitly in Phase 7/10.
+**Found during the fix (security, beyond the original six):** in every environment the API accepted the hardcoded
+demo logins (`admin@shopcloud.dev` / `Password123!` → SUPER_ADMIN) whenever the email was not in the users table,
+accepted demo JWT subjects without a user row, issued tokens without persisting refresh tokens when the DB failed,
+and the cart/orders controllers trusted a client `x-user-id` header. All demo/offline paths are now disabled when
+`NODE_ENV=production`, identity comes only from the verified JWT, and the rate limiter no longer trusts the
+client-controlled left side of `X-Forwarded-For`.
+
+### Phase 7 runtime configuration
+
+| Service | Variable | Value |
+| --- | --- | --- |
+| api | `NODE_ENV` | `production` |
+| api | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Secret Manager (`shopcloud-dev-jwt-*`) |
+| api | `DATABASE_URL` | Secret Manager (Phase 8) |
+| api | `CORS_ORIGIN` | unset (web proxies `/api` same-origin) or explicit origins |
+| api | `TRUST_PROXY_HOPS` | `1` when clients reach the API directly through Cloud Run's front end. **Decide in Phase 7:** if all traffic arrives via the web container's proxy, each hop (Cloud Run front end → nginx → Cloud Run front end) appends an entry, so the value must match that chain or the limiter keys on the web service's egress address |
+| api, worker | `GCP_PROJECT_ID` | `project-c3f386b1-6c37-468d-8ee` (the code still defaults to a non-existent `shopcloud-dev`) |
+| web | `API_UPSTREAM` | `https://<shopcloud-api-dev URL>` |
+| worker | `PUBSUB_DELIVERY` | `push` |
+| worker | `PUBSUB_PUSH_AUDIENCE`, `PUBSUB_PUSH_SERVICE_ACCOUNT` | push endpoint URL and the subscription's push identity (Phase 10) |
+
+The `AuthRateLimit` migration must be applied before the API serves traffic (Phase 8 migrator job).
+
+### Still open (later phases)
+
+- **Event publishing (Phase 10):** `EventsService.publish` logs and continues when Pub/Sub fails, so an order can
+  commit without its event. Fix with a transactional outbox once Pub/Sub exists; making it throw now would fail
+  every order until then.
+- **Structured logging (Phase 14):** JSON logs with `severity` and trace correlation.
+- **Seed safety (Phase 8):** the dev seed creates `usr-*-demo` users with a known password; it must never run
+  against a non-dev database.
 
 ## 10. Terraform strategy
 

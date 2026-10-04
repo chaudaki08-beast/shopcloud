@@ -9,16 +9,14 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { AuthRateLimiterGuard } from './guards/auth-rate-limiter.guard';
+import { requiredSecret } from '../../common/runtime-mode';
 
 @Global()
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret:
-        process.env.JWT_ACCESS_SECRET ||
-        process.env.JWT_SECRET ||
-        'shopcloud-default-secret-change-me',
+      secret: requiredSecret(['JWT_ACCESS_SECRET', 'JWT_SECRET'], 'shopcloud-default-secret-change-me'),
       signOptions: { expiresIn: '15m' },
     }),
   ],

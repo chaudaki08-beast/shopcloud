@@ -87,6 +87,6 @@ EXPOSE 8081
 
 # Built-in zero-dependency HTTP health probe
 HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "const http = require('http'); const req = http.request({ host: '127.0.0.1', port: process.env.HEALTH_PORT || 8081, path: '/health', timeout: 3000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"
+  CMD node -e "const http = require('http'); const req = http.request({ host: '127.0.0.1', port: process.env.PORT || process.env.HEALTH_PORT || 8081, path: '/health', timeout: 3000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"
 
 CMD ["node", "apps/workers/dist/index.js"]

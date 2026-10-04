@@ -9,6 +9,7 @@ import {
   Param,
   Req,
   UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { CartService } from './cart.service';
@@ -26,7 +27,9 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   private extractUserId(req: any): string {
-    return req.user?.id || req.headers?.['x-user-id'] || 'user-customer';
+    // Identity comes only from the verified JWT (JwtAuthGuard); never from client-supplied headers.
+    if (!req.user?.id) throw new UnauthorizedException('Authentication required');
+    return req.user.id;
   }
 
   @Get()

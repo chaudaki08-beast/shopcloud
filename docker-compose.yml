@@ -46,7 +46,8 @@ services:
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
-      CORS_ORIGIN: "*"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost,http://localhost:80,http://localhost:5173}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:

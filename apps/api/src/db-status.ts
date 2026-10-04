@@ -1,4 +1,5 @@
 import { prisma } from '@shopcloud/database';
+import { offlineFallbackEnabled } from './common/runtime-mode';
 
 let dbHealthy: boolean | null = null;
 let lastChecked = 0;
@@ -23,4 +24,12 @@ export async function isDatabaseOnline(): Promise<boolean> {
     dbHealthy = false;
     return false;
   }
+}
+
+/**
+ * Whether a service should query PostgreSQL. In production always true (no offline fallback exists);
+ * elsewhere it follows the cached connectivity probe so local preview and DB-less tests keep working.
+ */
+export async function useDatabase(): Promise<boolean> {
+  return !offlineFallbackEnabled() || isDatabaseOnline();
 }

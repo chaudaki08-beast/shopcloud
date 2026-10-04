@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { prisma, Role } from '@shopcloud/database';
-import { isDatabaseOnline } from '../../db-status';
+import { useDatabase } from '../../db-status';
+import { offlineFallbackEnabled, rethrowInProduction } from '../../common/runtime-mode';
 import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
@@ -8,7 +9,10 @@ export class AdminService {
   constructor(private readonly ordersService: OrdersService) {}
 
   async getDashboardMetrics() {
-    const localUserOrders = await this.ordersService.getUserOrders('user-customer');
+    // Demo orders exist only for local preview; production dashboards show real data or nothing.
+    const localUserOrders = offlineFallbackEnabled()
+      ? await this.ordersService.getUserOrders('user-customer')
+      : [];
     const localRecentOrders = localUserOrders.slice(0, 5).map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
@@ -20,7 +24,7 @@ export class AdminService {
       createdAt: o.createdAt,
     }));
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const [totalOrders, totalCustomers, totalProducts, lowStockProducts, recentOrders] =
           await Promise.all([
@@ -90,7 +94,8 @@ export class AdminService {
                 }))
               : localRecentOrders,
         };
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // fallback
       }
     }

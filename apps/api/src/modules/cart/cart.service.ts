@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { prisma } from '@shopcloud/database';
 import { CartSummaryDto, CartItemDto, ProductDto } from '@shopcloud/contracts';
-import { isDatabaseOnline } from '../../db-status';
+import { useDatabase } from '../../db-status';
+import { rethrowInProduction } from '../../common/runtime-mode';
 
 interface LocalCartItem {
   id: string;
@@ -67,7 +68,7 @@ export class CartService {
   private localCarts = new Map<string, LocalCartItem[]>();
 
   async getCart(userId: string): Promise<CartSummaryDto> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         let cart = await prisma.cart.findUnique({
           where: { userId },
@@ -98,7 +99,8 @@ export class CartService {
         }
 
         return this.calculateCartSummary(cart.items);
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -112,7 +114,7 @@ export class CartService {
       throw new BadRequestException('Quantity must be greater than zero');
     }
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const product = await prisma.product.findFirst({
           where: { OR: [{ id: productId }, { slug: productId }] },
@@ -162,6 +164,7 @@ export class CartService {
           return this.getCart(userId);
         }
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof BadRequestException) throw err;
       }
     }
@@ -204,7 +207,7 @@ export class CartService {
       throw new BadRequestException('Quantity must be at least 1');
     }
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const product = await prisma.product.findFirst({
           where: { OR: [{ id: productId }, { slug: productId }] },
@@ -235,6 +238,7 @@ export class CartService {
           }
         }
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof BadRequestException) throw err;
       }
     }
@@ -260,7 +264,7 @@ export class CartService {
   }
 
   async removeItem(userId: string, productId: string): Promise<CartSummaryDto> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const cart = await prisma.cart.findUnique({ where: { userId } });
         if (cart) {
@@ -272,7 +276,8 @@ export class CartService {
           });
           return this.getCart(userId);
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -284,13 +289,14 @@ export class CartService {
   }
 
   async clearCart(userId: string): Promise<{ success: boolean; message: string }> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const cart = await prisma.cart.findUnique({ where: { userId } });
         if (cart) {
           await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
