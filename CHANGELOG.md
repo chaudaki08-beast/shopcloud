@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Security
+* Production (`NODE_ENV=production`) no longer accepts the hardcoded demo logins or demo JWT subjects, no longer issues tokens when refresh-token storage fails, and no longer serves in-memory demo data when PostgreSQL fails (503 instead)
+* Cart and order identity comes only from the verified JWT; the client `x-user-id` header is no longer trusted
+* API refuses to boot in production without `JWT_ACCESS_SECRET`; CORS is an explicit `CORS_ORIGIN` allowlist (`*` rejected in production)
+* Auth rate limiting keys on the proxy-appended client address (`TRUST_PROXY_HOPS`) instead of the client-controlled `X-Forwarded-For` entry
+
+### Fixed (Cloud Run readiness)
+* Worker listens on Cloud Run's `PORT`; supports Pub/Sub push delivery (`PUBSUB_DELIVERY=push`) with OIDC verification; graceful shutdown closes the subscription and Prisma
+* Auth rate limits are shared across instances via a PostgreSQL fixed-window counter (migration `add_auth_rate_limits`)
+* Web nginx config is an env template (`PORT`, `API_UPSTREAM`) with per-request DNS resolution, so it starts on Cloud Run
+* API disconnects Prisma on shutdown
+
+---
+
 ## [0.5.0-phase5] — Phase 5: Docker & Containerization (2026-10-04)
 
 ### Added

@@ -59,7 +59,10 @@ Scope: every git-tracked file (`git ls-files` / `git grep`), excluding `package-
 Reviewed: `.gitignore`, `.dockerignore`, `.github/workflows/*.yml`, `Dockerfile.*`, `compose.yaml`, `docs/`.
 **No secret was found; nothing needed to be removed from history.**
 
-Known non-secret findings carried forward:
+Non-secret findings (fixed on `fix/cloud-run-readiness`):
 
-1. Hardcoded JWT fallback `'shopcloud-default-secret-change-me'` in `apps/api` (fix before Phase 7).
-2. CORS `origin: '*'` with `credentials: true` in `apps/api/src/main.ts` (restrict before public exposure).
+1. Hardcoded JWT fallback `'shopcloud-default-secret-change-me'` — now dev-only; production refuses to boot without `JWT_ACCESS_SECRET`.
+2. CORS `origin: '*'` with `credentials: true` — now a `CORS_ORIGIN` allowlist; `*` rejected in production.
+3. Hardcoded demo logins, demo JWT subjects, offline token fallbacks and the `x-user-id` header — disabled in production
+   (see [foundation.md §9](foundation.md#9-cloud-run-readiness-review)).
+4. Rate limiter keyed on the client-controlled left side of `X-Forwarded-For` — now uses `TRUST_PROXY_HOPS`.

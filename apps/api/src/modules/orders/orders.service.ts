@@ -13,7 +13,8 @@ import {
 import { CartService } from '../cart/cart.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStateMachine } from './order-state-machine';
-import { isDatabaseOnline } from '../../db-status';
+import { useDatabase } from '../../db-status';
+import { rethrowInProduction } from '../../common/runtime-mode';
 
 interface StatusTransitionRecord {
   orderId: string;
@@ -36,7 +37,7 @@ export class OrdersService {
       throw new BadRequestException('Cannot create an order with an empty cart');
     }
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const dbProductCount = await prisma.product.count({
           where: { id: { in: cartSummary.items.map((i) => i.productId) } },
@@ -147,6 +148,7 @@ export class OrdersService {
         return this.formatOrder(createdOrder);
         }
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof BadRequestException) throw err;
       }
     }
@@ -193,7 +195,7 @@ export class OrdersService {
   }
 
   async getUserOrders(userId: string): Promise<OrderResponseDto[]> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const orders = await prisma.order.findMany({
           where: { userId },
@@ -204,7 +206,8 @@ export class OrdersService {
         if (orders && orders.length > 0) {
           return orders.map((o) => this.formatOrder(o));
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -220,7 +223,7 @@ export class OrdersService {
   ): Promise<OrderResponseDto> {
     let result: OrderResponseDto | null = null;
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const order = await prisma.order.findUnique({
           where: { id: orderId },
@@ -230,7 +233,8 @@ export class OrdersService {
         if (order) {
           result = this.formatOrder(order);
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -274,7 +278,7 @@ export class OrdersService {
       return existingOrder; // Idempotent no-op
     }
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const orderInDb = await prisma.order.findUnique({ where: { id: orderId } });
         if (orderInDb) {
@@ -341,7 +345,8 @@ export class OrdersService {
 
           return this.getOrderById(orderId);
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }

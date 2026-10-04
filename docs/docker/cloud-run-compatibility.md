@@ -3,7 +3,7 @@
 This document assesses the ShopCloud container architecture against the official Google Cloud Run container runtime contract and requirements.
 
 > **Superseded in part (Phase 6):** the Phase 6 readiness review found six issues this matrix missed (worker port,
-> JWT fallback secret, in-memory state, pull subscriber, nginx upstream, shutdown cleanup). The actual GCP project is
+> JWT fallback secret, in-memory state, pull subscriber, nginx upstream, shutdown cleanup); all six are now fixed. The actual GCP project is
 > `project-c3f386b1-6c37-468d-8ee` and the registry is `asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud`.
 > See [docs/gcp/foundation.md §9](../gcp/foundation.md#9-cloud-run-readiness-review).
 

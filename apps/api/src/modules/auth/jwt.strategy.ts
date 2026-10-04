@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { prisma } from '@shopcloud/database';
 import { UserRole } from '@shopcloud/contracts';
 import { PermissionsService } from './permissions.service';
+import { offlineFallbackEnabled, requiredSecret, rethrowInProduction } from '../../common/runtime-mode';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -11,10 +12,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        process.env.JWT_ACCESS_SECRET ||
-        process.env.JWT_SECRET ||
+      secretOrKey: requiredSecret(
+        ['JWT_ACCESS_SECRET', 'JWT_SECRET'],
         'shopcloud-default-secret-change-me',
+      ),
     });
   }
 
@@ -23,8 +24,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid token payload');
     }
 
-    // Demo / mock accounts support for unit tests without active DB
-    if (payload.sub === 'usr-admin-demo' || payload.sub === 'user-admin') {
+    // Demo / mock accounts support for unit tests without active DB (never in production)
+    if (offlineFallbackEnabled() && (payload.sub === 'usr-admin-demo' || payload.sub === 'user-admin')) {
       const perms = await this.permissionsService.getPermissionsForRole(UserRole.SUPER_ADMIN);
       return {
         id: payload.sub,
@@ -37,7 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       };
     }
 
-    if (payload.sub === 'usr-customer-demo' || payload.sub === 'user-customer') {
+    if (offlineFallbackEnabled() && (payload.sub === 'usr-customer-demo' || payload.sub === 'user-customer')) {
       const perms = await this.permissionsService.getPermissionsForRole(UserRole.CUSTOMER);
       return {
         id: payload.sub,
@@ -50,7 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       };
     }
 
-    if (payload.sub === 'usr-inventory-demo' || payload.sub === 'user-inventory') {
+    if (offlineFallbackEnabled() && (payload.sub === 'usr-inventory-demo' || payload.sub === 'user-inventory')) {
       const perms = await this.permissionsService.getPermissionsForRole(UserRole.INVENTORY_MANAGER);
       return {
         id: payload.sub,
@@ -89,6 +90,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       };
     } catch (err: any) {
       if (err instanceof UnauthorizedException) throw err;
+      rethrowInProduction(err);
       // In offline/mock fallback during unit testing:
       const permissions = await this.permissionsService.getPermissionsForRole(
         payload.role || UserRole.CUSTOMER,

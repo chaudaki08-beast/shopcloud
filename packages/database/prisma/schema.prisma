@@ -83,6 +83,17 @@ model RefreshToken {
   @@index([tokenId])
 }
 
+// Fixed-window counters for auth endpoint rate limiting, shared by every API instance
+// (Cloud Run scales horizontally, so per-process memory cannot enforce a global limit).
+model AuthRateLimit {
+  key         String
+  windowStart DateTime
+  hits        Int      @default(1)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+}
+
 model Permission {
   id          String           @id @default(uuid())
   name        String           @unique

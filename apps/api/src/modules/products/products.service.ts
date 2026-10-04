@@ -12,7 +12,8 @@ import {
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
-import { isDatabaseOnline } from '../../db-status';
+import { useDatabase } from '../../db-status';
+import { rethrowInProduction } from '../../common/runtime-mode';
 
 const SEED_CATEGORIES: CategoryDto[] = [
   {
@@ -194,7 +195,7 @@ export class ProductsService {
       sortDir = query.sortOrder || 'desc';
     }
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const where: Prisma.ProductWhereInput = {};
 
@@ -263,7 +264,8 @@ export class ProductsService {
             totalPages,
           };
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -335,7 +337,7 @@ export class ProductsService {
   }
 
   async findById(idOrSlug: string): Promise<ProductDto> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const product = await prisma.product.findFirst({
           where: {
@@ -350,7 +352,8 @@ export class ProductsService {
         if (product) {
           return this.formatProduct(product);
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -373,7 +376,7 @@ export class ProductsService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const existingSku = await prisma.product.findUnique({ where: { sku: dto.sku } });
         if (existingSku) {
@@ -404,6 +407,7 @@ export class ProductsService {
 
         return this.formatProduct(created);
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof ConflictException) throw err;
       }
     }
@@ -443,7 +447,7 @@ export class ProductsService {
   async update(id: string, dto: UpdateProductDto): Promise<ProductDto> {
     await this.findById(id);
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         if (dto.sku) {
           const conflict = await prisma.product.findFirst({
@@ -469,6 +473,7 @@ export class ProductsService {
 
         return this.formatProduct(updated);
       } catch (err) {
+        rethrowInProduction(err);
         if (err instanceof ConflictException) throw err;
       }
     }
@@ -505,14 +510,15 @@ export class ProductsService {
   async remove(id: string): Promise<{ success: boolean; message: string }> {
     const product = await this.findById(id);
 
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         await prisma.product.update({
           where: { id: product.id },
           data: { isActive: false },
         });
         return { success: true, message: `Product '${product.name}' removed successfully` };
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
@@ -526,7 +532,7 @@ export class ProductsService {
 
   // Backward compatibility for existing endpoints
   async getCategories(): Promise<CategoryDto[]> {
-    if (await isDatabaseOnline()) {
+    if (await useDatabase()) {
       try {
         const categories = await prisma.category.findMany({
           orderBy: { name: 'asc' },
@@ -542,7 +548,8 @@ export class ProductsService {
             updatedAt: c.updatedAt.toISOString(),
           }));
         }
-      } catch {
+      } catch (err) {
+        rethrowInProduction(err);
         // Fallback
       }
     }
