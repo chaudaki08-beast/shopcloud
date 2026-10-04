@@ -44,6 +44,9 @@ RUN npm run build --workspace=@shopcloud/contracts
 # Generate Prisma Client binary engine
 RUN npx prisma generate --schema=./packages/database/prisma/schema.prisma
 
+# Build shared database package (dist/ is consumed by the workers and copied into the runtime stage)
+RUN npm run build --workspace=@shopcloud/database
+
 # Build TypeScript Workers Daemon
 RUN npm run build --workspace=@shopcloud/workers
 
