@@ -53,6 +53,10 @@ RUN npm run build --workspace=@shopcloud/workers
 # Prune development dependencies for minimal production footprint
 RUN npm prune --omit=dev
 
+# npm may place a dependency inside a workspace's own node_modules (e.g. apps/api/node_modules/dotenv)
+# instead of hoisting it; make sure every workspace folder exists so the runtime stage can copy them all
+RUN mkdir -p packages/contracts/node_modules packages/database/node_modules apps/workers/node_modules
+
 # ------------------------------------------------------------------------------
 # Stage 3: Minimal Production Runtime
 # ------------------------------------------------------------------------------
@@ -77,11 +81,14 @@ COPY --chown=node:node --from=builder /app/package*.json ./
 COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/packages/contracts/dist ./packages/contracts/dist
 COPY --chown=node:node --from=builder /app/packages/contracts/package.json ./packages/contracts/
+COPY --chown=node:node --from=builder /app/packages/contracts/node_modules ./packages/contracts/node_modules
 COPY --chown=node:node --from=builder /app/packages/database/dist ./packages/database/dist
 COPY --chown=node:node --from=builder /app/packages/database/prisma ./packages/database/prisma
 COPY --chown=node:node --from=builder /app/packages/database/package.json ./packages/database/
+COPY --chown=node:node --from=builder /app/packages/database/node_modules ./packages/database/node_modules
 COPY --chown=node:node --from=builder /app/apps/workers/dist ./apps/workers/dist
 COPY --chown=node:node --from=builder /app/apps/workers/package.json ./apps/workers/
+COPY --chown=node:node --from=builder /app/apps/workers/node_modules ./apps/workers/node_modules
 
 EXPOSE 8081
 

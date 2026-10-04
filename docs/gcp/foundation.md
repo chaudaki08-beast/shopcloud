@@ -51,9 +51,9 @@ per-environment projects (Phase 13, Terraform) is a move, not a rename.
 | `secretmanager.googleapis.com` | **ENABLED** (Phase 6, after billing) | Secret containers and per-secret IAM |
 | `cloudbilling.googleapis.com` | **ENABLED** (Phase 6) | Billing checks billed to this project (the shared gcloud client project hit `RESOURCE_EXHAUSTED`) |
 | `billingbudgets.googleapis.com` | **ENABLED** (Phase 6) | Budget alert |
-| `run.googleapis.com` | **DEFERRED** (Phase 7) | Not enabled |
+| `run.googleapis.com` | **ENABLED** (Phase 7) | Cloud Run services |
+| `containerregistry.googleapis.com`, `pubsub.googleapis.com` | **ENABLED automatically** (Phase 7) | Declared dependencies of Cloud Run; enabled by Google with `run`. No Pub/Sub topics or subscriptions exist (Phase 10) |
 | `sqladmin.googleapis.com` | **DEFERRED** (Phase 8) | Not enabled |
-| `pubsub.googleapis.com` | **DEFERRED** (Phase 10) | Not enabled |
 | `container.googleapis.com`, `gkehub.googleapis.com` | **DEFERRED** (Phase 17) | Not enabled |
 | `storage.googleapis.com` | **ALREADY ENABLED** (Google default) | Not enabled by ShopCloud; no buckets created. Application storage is Phase 9 |
 
@@ -110,7 +110,7 @@ Convention: `shopcloud-<component>-<environment>` for workloads and data resourc
 
 | Resource | Name |
 | --- | --- |
-| Cloud Run services (Phase 7) | `shopcloud-api-dev`, `shopcloud-web-dev`, `shopcloud-worker-dev` |
+| Cloud Run services (Phase 7) | `shopcloud-api`, `shopcloud-web` (deployed; single-environment project, so no suffix), `shopcloud-worker` (Phase 10) |
 | Cloud SQL instance (Phase 8) | `shopcloud-db-dev` |
 | Buckets (Phase 9, globally unique) | `shopcloud-media-dev-<project-number>` |
 | Pub/Sub (Phase 10) | topics `shopcloud-order-created-dev`, subscriptions `shopcloud-inventory-sub-dev` |
@@ -119,7 +119,7 @@ Convention: `shopcloud-<component>-<environment>` for workloads and data resourc
 | WIF | pool `shopcloud-github-pool`, provider `github-actions` |
 | Artifact Registry | `shopcloud` (one repository, images per component) |
 
-Phase 12 note: `deploy.yml` targets a Cloud Run service named `shopcloud-dev-api`; align to `shopcloud-api-dev`.
+Phase 12 note: `deploy.yml` targets a Cloud Run service named `shopcloud-dev-api`; align to the deployed `shopcloud-api`.
 
 Labels (applied where the resource supports labels — project, Artifact Registry, Cloud Run, Cloud SQL, buckets,
 Pub/Sub, secrets; **not** IAM service accounts or WIF pools, which do not support labels):
@@ -221,9 +221,9 @@ client-controlled left side of `X-Forwarded-For`.
 | api | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Secret Manager (`shopcloud-dev-jwt-*`) |
 | api | `DATABASE_URL` | Secret Manager (Phase 8) |
 | api | `CORS_ORIGIN` | unset (web proxies `/api` same-origin) or explicit origins |
-| api | `TRUST_PROXY_HOPS` | `1` when clients reach the API directly through Cloud Run's front end. **Decide in Phase 7:** if all traffic arrives via the web container's proxy, each hop (Cloud Run front end → nginx → Cloud Run front end) appends an entry, so the value must match that chain or the limiter keys on the web service's egress address |
+| api | `TRUST_PROXY_HOPS` | `1` — **decided in Phase 7** (safe default: direct calls keyed correctly; traffic via the web proxy shares one bucket, never spoofable). See [cloud-run.md §7](cloud-run.md#7-networking) |
 | api, worker | `GCP_PROJECT_ID` | `project-c3f386b1-6c37-468d-8ee` (the code still defaults to a non-existent `shopcloud-dev`) |
-| web | `API_UPSTREAM` | `https://<shopcloud-api-dev URL>` |
+| web | `API_UPSTREAM` | `https://shopcloud-api-24903284190.asia-south1.run.app` (set in Phase 7) |
 | worker | `PUBSUB_DELIVERY` | `push` |
 | worker | `PUBSUB_PUSH_AUDIENCE`, `PUBSUB_PUSH_SERVICE_ACCOUNT` | push endpoint URL and the subscription's push identity (Phase 10) |
 
