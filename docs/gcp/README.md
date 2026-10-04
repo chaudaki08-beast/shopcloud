@@ -18,6 +18,8 @@ Everything below was created or observed with real `gcloud` output on 2026-10-04
 | Cloud Monitoring | **PASS** | API enabled, Monitoring API responds `200`; no dashboards/alerts (Phase 14) |
 | Budget alerts | **PASS** | `shopcloud-dev-monthly`: ₹500/month, alerts at 50/90/100 %, scoped to this project |
 | Cloud Run readiness | **PASS** (code) | 6 issues fixed + production auth hardening; runtime config listed in [foundation.md §9](foundation.md#9-cloud-run-readiness-review) |
+| Cloud Run (Phase 7) | **PASS** | `shopcloud-api` + `shopcloud-web` live; database-backed features **DEFERRED TO PHASE 8** — see [cloud-run.md](cloud-run.md) |
+| Worker service | **DEFERRED** (Phase 10) | Push delivery ready; no Pub/Sub topics yet |
 | Terraform | **DEFERRED** (Phase 13) | Strategy in [foundation.md §10](foundation.md#10-terraform-strategy) |
 
 ## Documents
@@ -27,6 +29,7 @@ Everything below was created or observed with real `gcloud` output on 2026-10-04
 | [foundation.md](foundation.md) | Project, region, environments, APIs, Artifact Registry, naming & labels, logging, monitoring, cost control, Cloud Run readiness, Terraform strategy |
 | [iam.md](iam.md) | Identities, least-privilege role plan, Workload Identity Federation design and GitHub restriction |
 | [security.md](security.md) | Secret Manager strategy, credential policy, repository credential scan |
+| [cloud-run.md](cloud-run.md) | Phase 7: services, URLs, images, IAM, secrets, probes, scaling, rollback, limitations |
 | [validation.md](validation.md) | Commands run and their actual results |
 
 ## Working with the project locally
@@ -38,7 +41,10 @@ gcloud config configurations activate shopcloud   # account chaudaki08@gmail.com
 gcloud config configurations activate default     # switch back to other work
 ```
 
-## Out of scope for Phase 6
+## Live endpoints (Phase 7)
 
-No Cloud Run, Cloud SQL, application buckets, Pub/Sub, GKE, Terraform resources, deployment pipeline, or
-production secrets were created. Those belong to Phases 7–17.
+- Web: https://shopcloud-web-24903284190.asia-south1.run.app
+- API: https://shopcloud-api-24903284190.asia-south1.run.app (health: `/api/v1/health/liveness`)
+
+Not yet created: Cloud SQL (Phase 8), application buckets (9), Pub/Sub topics (10), GKE (17), Terraform (13),
+automated deployment (12).

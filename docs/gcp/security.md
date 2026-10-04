@@ -3,13 +3,14 @@
 ## 1. Secret Manager strategy
 
 **Status: PASS** — `secretmanager.googleapis.com` is enabled. Three secret **containers** exist with labels,
-`asia-south1` user-managed replication and per-secret IAM, but **no versions**: no value — real or placeholder — is
-stored in GCP or in this repository. Values are added out-of-band by the owner in Phase 7/8.
+`asia-south1` user-managed replication and per-secret IAM. Phase 6 created them without values; in Phase 7 the JWT access
+secret received a random value generated straight into Secret Manager (never displayed, never in this repository) and is
+mounted by Cloud Run pinned to version 2. The database URL arrives in Phase 8.
 
 | Secret (created) | Versions | Accessors |
 | --- | --- | --- |
-| `shopcloud-dev-jwt-access-secret` | 0 | `shopcloud-api-runtime` |
-| `shopcloud-dev-jwt-refresh-secret` | 0 | `shopcloud-api-runtime` |
+| `shopcloud-dev-jwt-access-secret` | **1 enabled (v2, Phase 7)** | `shopcloud-api-runtime` |
+| `shopcloud-dev-jwt-refresh-secret` | 0 — not needed (refresh tokens are opaque random values stored hashed; no code reads it) | `shopcloud-api-runtime` |
 | `shopcloud-dev-database-url` | 0 | `shopcloud-api-runtime`, `shopcloud-worker-runtime` |
 
 The deployer has no Secret Manager access (verified: 403 from GitHub Actions).

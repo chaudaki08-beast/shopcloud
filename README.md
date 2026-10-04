@@ -1,12 +1,18 @@
 # 🛒 ShopCloud — Cloud-Native Event-Driven E-Commerce Platform on GCP
 
-[![CI Pipeline](https://github.com/your-org/shopcloud/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/shopcloud/actions/workflows/ci.yml)
+[![CI Pipeline](https://github.com/chaudaki08-beast/shopcloud/actions/workflows/ci.yml/badge.svg)](https://github.com/chaudaki08-beast/shopcloud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Google Cloud](https://img.shields.io/badge/GCP-Cloud%20Run%20%7C%20Cloud%20SQL%20%7C%20Pub%2FSub-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/)
 [![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![Docker](https://img.shields.io/badge/Containers-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
 > **ShopCloud** is an enterprise-grade, event-driven e-commerce platform engineered specifically to demonstrate production cloud architecture, distributed systems resilience, and site reliability engineering on **Google Cloud Platform (GCP)**.
+
+
+> **Live on Cloud Run (Phase 7):** [storefront](https://shopcloud-web-24903284190.asia-south1.run.app) ·
+> [API liveness](https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health/liveness).
+> Cloud SQL arrives in Phase 8 — until then database-backed features (catalog, sign-in, cart, orders) return
+> `503 DATABASE_UNAVAILABLE` by design. Details: [docs/gcp/cloud-run.md](docs/gcp/cloud-run.md).
 
 ---
 
@@ -66,8 +72,8 @@ flowchart TD
 | **Phase 4** | Authentication & RBAC | ✅ **COMPLETE** | `v0.4.0-phase4` |
 | **Phase 5** | Docker Containerization | ✅ **COMPLETE** | `v0.5.0-phase5` |
 | **Phase 6** | GCP Foundation & Platform Baseline ([docs](docs/gcp/README.md)) | ✅ **COMPLETE** | `v0.6.0-phase6` |
-| **Phase 7** | Cloud Run Deployment | 🟡 **UP NEXT** | `v0.7.0-phase7` |
-| **Phase 8** | Cloud SQL Integration | ⚪ NOT STARTED | `v0.8.0-phase8` |
+| **Phase 7** | Cloud Run Deployment ([docs](docs/gcp/cloud-run.md)) | ✅ **COMPLETE** | `v0.7.0-phase7` |
+| **Phase 8** | Cloud SQL Integration | 🟡 **UP NEXT** | `v0.8.0-phase8` |
 | **Phase 9** | Cloud Storage & Signed URLs | ⚪ NOT STARTED | `v0.9.0-phase9` |
 | **Phase 10** | Pub/Sub Event Pipelines | ⚪ NOT STARTED | `v1.0.0-phase10` |
 | **Phase 11** | Payments & Webhooks | ⚪ NOT STARTED | `v1.1.0-phase11` |
