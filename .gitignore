@@ -43,6 +43,15 @@ infrastructure/terraform/**/*.tfstate.*
 infrastructure/terraform/**/*.tfvars
 !infrastructure/terraform/**/*.tfvars.example
 
+# GCP credentials (never commit; ShopCloud uses Workload Identity Federation, not JSON keys)
+gha-creds-*.json
+*-sa-key.json
+*service-account*.json
+application_default_credentials.json
+credentials.json
+*.pem
+*.p12
+
 # Testing / Coverage
 coverage/
 .nyc_output/

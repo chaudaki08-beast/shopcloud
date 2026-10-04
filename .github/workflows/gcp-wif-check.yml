@@ -1,0 +1,41 @@
+name: GCP WIF Check
+
+# Read-only proof that GitHub Actions can authenticate to GCP through Workload Identity Federation
+# (no JSON keys) and impersonate the deployer service account. Deploys nothing.
+# Identifiers below are resource names, not secrets. See docs/gcp/iam.md.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/gcp-wif-check.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  wif:
+    name: Authenticate via Workload Identity Federation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/24903284190/locations/global/workloadIdentityPools/shopcloud-github-pool/providers/github-actions
+          service_account: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 300s
+          # userinfo.email lets tokeninfo report which identity the token belongs to
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/userinfo.email
+
+      - name: Verify impersonated identity
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          EXPECTED: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
+        run: |
+          email=$(curl -sf --data-urlencode "access_token=${ACCESS_TOKEN}" https://oauth2.googleapis.com/tokeninfo | jq -r '.email')
+          echo "Token issued for: ${email}"
+          test "${email}" = "${EXPECTED}"
