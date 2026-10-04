@@ -1,28 +1,87 @@
 name: ShopCloud CD Pipeline
 
+# Deploys only after "ShopCloud CI Pipeline" has passed on main, so CD can never mask a CI failure.
+# Note: workflow_run triggers are always read from the workflow file on the default branch (main).
 on:
-  push:
+  workflow_run:
+    workflows: ["ShopCloud CI Pipeline"]
+    types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: cd-${{ github.workflow }}
+  cancel-in-progress: false
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: asia-south1
   GAR_REPOSITORY: shopcloud
-  WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
-  WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
+  preflight:
+    name: Check Deployment Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+
+    steps:
+      - name: Verify GCP Workload Identity Federation secrets
+        id: check
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+          GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+        run: |
+          missing=()
+          for name in GCP_PROJECT_ID GCP_WIF_PROVIDER GCP_WIF_SERVICE_ACCOUNT; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Deployment not configured::Cloud Run deployment skipped. Missing repository secrets: ${missing[*]}"
+          {
+            echo "### Deployment skipped: GCP not configured"
+            echo ""
+            echo "CI passed, but the following repository secrets are not set, so nothing was deployed:"
+            echo ""
+            for name in "${missing[@]}"; do echo "- \`$name\`"; done
+            echo ""
+            echo "Configure them under Settings > Secrets and variables > Actions once the GCP infrastructure exists."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Build, Push to GAR & Deploy to Cloud Run
+    needs: preflight
+    if: needs.preflight.outputs.configured == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Authenticate to Google Cloud via Workload Identity Federation
         uses: google-github-actions/auth@v2
@@ -40,9 +99,9 @@ jobs:
       # API Deployment
       - name: Build and Push API Container
         run: |
-          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ github.sha }}"
+          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ env.DEPLOY_SHA }}"
           LATEST_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:latest"
-          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f apps/api/Dockerfile .
+          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f Dockerfile.api .
           docker push "$IMAGE_TAG"
           docker push "$LATEST_TAG"
 
@@ -51,13 +110,13 @@ jobs:
         with:
           service: shopcloud-dev-api
           region: ${{ env.REGION }}
-          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ github.sha }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ env.DEPLOY_SHA }}
 
       # Workers Deployment
       - name: Build and Push Workers Container
         run: |
-          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/workers:${{ github.sha }}"
+          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/workers:${{ env.DEPLOY_SHA }}"
           LATEST_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/workers:latest"
-          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f apps/workers/Dockerfile .
+          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f Dockerfile.worker .
           docker push "$IMAGE_TAG"
           docker push "$LATEST_TAG"

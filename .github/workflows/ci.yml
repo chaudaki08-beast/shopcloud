@@ -2,21 +2,53 @@ name: ShopCloud CI Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feature/**', 'fix/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+# Supersede obsolete runs for the same PR; every push to a branch is still validated.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
     name: Lint, Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Disposable PostgreSQL for the API specs and @shopcloud/database integration tests.
+    # Mirrors the postgres:16-alpine service in compose.yaml.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shopcloud_ci
+          POSTGRES_PASSWORD: shopcloud_ci
+          POSTGRES_DB: shopcloud_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shopcloud_ci -d shopcloud_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    # CI-only throwaway values for the ephemeral service container above. Not real secrets.
+    env:
+      DATABASE_URL: postgresql://shopcloud_ci:shopcloud_ci@localhost:5432/shopcloud_ci?schema=public
+      JWT_ACCESS_SECRET: ci-only-jwt-access-secret-not-used-outside-github-actions
+      JWT_REFRESH_SECRET: ci-only-jwt-refresh-secret-not-used-outside-github-actions
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: 'npm'
@@ -24,11 +56,22 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      # Build order: contracts -> database (Prisma client + dist) -> api / workers / web.
+      # @shopcloud/database resolves to dist/index.js, which is gitignored and must be built here.
       - name: Build Contracts
         run: npm run build --workspace=@shopcloud/contracts
 
       - name: Generate Prisma Client
-        run: npx prisma generate --schema=./packages/database/prisma/schema.prisma
+        run: npm run db:generate
+
+      - name: Build Database Package
+        run: npm run build --workspace=@shopcloud/database
+
+      - name: Apply Database Migrations
+        run: npm run db:migrate:deploy
+
+      - name: Seed Database
+        run: npm run db:seed
 
       - name: Build Backend API
         run: npm run build --workspace=@shopcloud/api
@@ -38,3 +81,42 @@ jobs:
 
       - name: Build Web Frontend
         run: npm run build --workspace=@shopcloud/web
+
+      - name: Run Monorepo Test Suites
+        run: npm test
+
+  docker:
+    name: Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            dockerfile: Dockerfile.api
+          - service: worker
+            dockerfile: Dockerfile.worker
+          - service: web
+            dockerfile: Dockerfile.web
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.dockerfile }} (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: shopcloud-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Validate Compose Configuration
+        if: matrix.service == 'api'
+        run: docker compose -f compose.yaml config --quiet
