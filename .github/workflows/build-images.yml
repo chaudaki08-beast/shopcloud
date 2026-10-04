@@ -2,12 +2,15 @@ name: Build & Push Images
 
 # Builds the Cloud Run images and pushes them to Artifact Registry through Workload Identity Federation
 # (no keys). It does NOT deploy: Cloud Run deployment is manual in Phase 7; Phase 12 automates it.
-# Runs on manual dispatch, and when this file changes (so a branch can produce images before it is on main).
+# Runs on manual dispatch, and when this file or an image recipe changes (so a branch can produce images
+# before it is on main, and a Dockerfile fix always yields fresh images).
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/build-images.yml'
+      - 'Dockerfile.api'
+      - 'Dockerfile.web'
 
 permissions:
   contents: read

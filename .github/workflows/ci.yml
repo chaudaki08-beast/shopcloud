@@ -118,25 +118,26 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      # Cloud Run contract smoke test: the container must honour an injected PORT and start without
-      # its dependencies being reachable. (The API image needs PostgreSQL, so it is build-only here.)
+      # Cloud Run contract smoke test: the container must honour an injected PORT and start without its
+      # dependencies being reachable. The API boots in production mode without PostgreSQL (data routes
+      # return 503, liveness stays 200), exactly as on Cloud Run before Cloud SQL exists.
       - name: Smoke Test Container on Cloud Run PORT
-        if: matrix.service != 'api'
         run: |
           case "${{ matrix.service }}" in
-            web)    extra="-e API_UPSTREAM=http://api.invalid:3000" ;;
-            worker) extra="-e PUBSUB_DELIVERY=push -e NODE_ENV=development -e HEALTH_PORT=8081" ;;
+            api)    extra="-e NODE_ENV=production -e JWT_ACCESS_SECRET=ci-only-smoke-test-secret-not-used-elsewhere"; path=/api/v1/health/liveness ;;
+            web)    extra="-e API_UPSTREAM=http://api.invalid:3000"; path=/health ;;
+            worker) extra="-e PUBSUB_DELIVERY=push -e NODE_ENV=development -e HEALTH_PORT=8081"; path=/health ;;
           esac
           docker run -d --name smoke -p 8080:8080 -e PORT=8080 $extra shopcloud-${{ matrix.service }}:ci
-          for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/health; then echo; echo "healthy on PORT=8080"; exit 0; fi
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8080${path}"; then echo; echo "healthy on PORT=8080"; exit 0; fi
             sleep 1
           done
           docker logs smoke
           exit 1
 
       - name: Container Logs
-        if: always() && matrix.service != 'api'
+        if: always()
         run: docker logs smoke 2>&1 | tail -30 || true
 
       - name: Validate Compose Configuration
