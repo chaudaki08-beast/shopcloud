@@ -196,3 +196,64 @@ Executed against live production deployment `https://shopcloud-api-24903284190.a
 - Cloud Run logs: Inspected logs for `shopcloud-api`; zero credential leakage.
 - Cloud SQL network: Direct public access disabled.
 
+---
+
+# Phase 9 Validation — Cloud Storage & Object Storage
+
+Captured on **2026-10-05** against Google Cloud Platform (`asia-south1`, project `project-c3f386b1-6c37-468d-8ee`).
+
+## 1. GCS Bucket Infrastructure Validation
+
+| # | Check | Command / Target | Actual Result | Status |
+| :- | :--- | :--- | :--- | :- |
+| 1 | Bucket Provisioning | `gcloud storage buckets describe gs://shopcloud-media-24903284190` | `asia-south1`, `STANDARD` storage class, active | **PASS** |
+| 2 | Uniform Bucket Access | Bucket configuration | `uniform_bucket_level_access: true` | **PASS** |
+| 3 | Public Access Prevention | Bucket configuration | `public_access_prevention: enforced` | **PASS** |
+| 4 | Lifecycle Policy | Bucket configuration | `AbortIncompleteMultipartUpload` after 7 days | **PASS** |
+| 5 | Least-Privilege IAM | IAM policy on bucket | `roles/storage.objectUser` granted to `shopcloud-api-runtime` | **PASS** |
+
+## 2. Cloud Run & Database Integration
+
+| # | Check | Target | Actual Result | Status |
+| :- | :--- | :--- | :--- | :- |
+| 1 | Cloud SQL Migration | `prisma migrate deploy` | `20261005102731_add_product_image_storage_metadata` applied cleanly (0 pending) | **PASS** |
+| 2 | API Revision Serving | Cloud Run `shopcloud-api` | Revision `shopcloud-api-00007-nxs` serving 100% traffic | **PASS** |
+| 3 | Health Probe | `GET /api/v1/health` | HTTP 200, `database: healthy`, latency 8ms | **PASS** |
+
+## 3. Real Cloud Run + Cloud SQL + GCS E2E Validation (31/31 Passed)
+
+Executed against live production deployment `https://shopcloud-api-24903284190.asia-south1.run.app` and bucket `gs://shopcloud-media-24903284190`:
+
+| Step | Test Description | Observed Behavior | Status |
+| :--- | :--- | :--- | :- |
+| **1** | API Gateway Healthy | HTTP 200 OK | **PASS** |
+| **2** | PostgreSQL Reachable from Cloud Run | Healthy probe via Unix socket (8ms) | **PASS** |
+| **3** | Register Admin & Customer Accounts | Public `/auth/register` creates test users | **PASS** |
+| **4** | Elevate Role to `SUPER_ADMIN` in Cloud SQL | User updated in Cloud SQL database | **PASS** |
+| **5** | Authenticate & Obtain JWT Tokens | Both Admin and Customer retrieve valid tokens | **PASS** |
+| **6** | Target Product Selection | Fetches live catalog and picks target product | **PASS** |
+| **7** | Multipart Image Upload (`POST /images`) | HTTP 201 Created; GCS upload confirmed | **PASS** |
+| **8** | Metadata & Key Structure | Valid UUID path: `products/{id}/{uuid}.jpg` | **PASS** |
+| **9** | Physical Object in GCS Bucket | Verified via `gcloud storage objects describe` | **PASS** |
+| **10** | GCS Object Size Verification | Matches uploaded file (140 bytes) | **PASS** |
+| **11** | GCS Content-Type Verification | Confirmed `image/jpeg` in GCS metadata | **PASS** |
+| **12** | Image Metadata Retrieval (`GET /images/:id`) | HTTP 200; `storageKey` matches | **PASS** |
+| **13** | Stream Image Binary (`GET /images/:id/file`) | HTTP 200; Content-Type `image/jpeg` | **PASS** |
+| **14** | Streamed Binary Integrity | Buffer comparison matches byte-for-byte | **PASS** |
+| **15** | Signed URL Endpoint (`GET /signed-url`) | HTTP 200; Signed URL or stream fallback returned | **PASS** |
+| **16** | Set Primary Image (`PATCH /primary`) | HTTP 200; Atomically updates primary image flag | **PASS** |
+| **17** | RBAC Guard: Customer Upload Attempt | HTTP 403 Forbidden | **PASS** |
+| **18** | Security Guard: Unauthenticated Upload | HTTP 401 Unauthorized | **PASS** |
+| **19** | Security Guard: Spoofed Magic Bytes | HTTP 400 Bad Request; blocked spoofed header | **PASS** |
+| **20** | Safety Guard: Nonexistent Product Upload | HTTP 404 Not Found | **PASS** |
+| **21** | Delete Image (`DELETE /images/:id`) | HTTP 200 OK; removed from Cloud SQL | **PASS** |
+| **22** | GCS Physical Object Cleanup | HTTP 404 Not Found when describing object in GCS | **PASS** |
+| **23** | Deleted Image Verification in Database | HTTP 404 Not Found on subsequent GET | **PASS** |
+| **24** | Test User Teardown | Removed temporary test accounts from Cloud SQL | **PASS** |
+
+## 4. Cost Control Verification
+
+* Cloud SQL activation policy patched to `NEVER` immediately following test completion.
+* Current state: `STOPPED` ($0 compute spend).
+
+

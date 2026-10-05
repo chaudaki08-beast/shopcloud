@@ -9,11 +9,12 @@
 > **ShopCloud** is an enterprise-grade, event-driven e-commerce platform engineered specifically to demonstrate production cloud architecture, distributed systems resilience, and site reliability engineering on **Google Cloud Platform (GCP)**.
 
 
-> **Live on Google Cloud (Phase 8):**
+> **Live on Google Cloud (Phase 9):**
 > * **Storefront**: [https://shopcloud-web-24903284190.asia-south1.run.app](https://shopcloud-web-24903284190.asia-south1.run.app)
 > * **API Gateway**: [https://shopcloud-api-24903284190.asia-south1.run.app](https://shopcloud-api-24903284190.asia-south1.run.app)
-> * **API Health & Cloud SQL Status**: [https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health](https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health) (PostgreSQL 16 healthy, 7ms latency)
-> * **Cloud SQL Architecture & Specs**: [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md) · [docs/gcp/database-production.md](docs/gcp/database-production.md)
+> * **API Health & Service Status**: [https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health](https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health)
+> * **Object Storage**: Bucket `gs://shopcloud-media-24903284190` (`asia-south1`, UBLA, Public Access Prevention enforced)
+> * **Cloud Architecture Documentation**: [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/storage-security.md](docs/gcp/storage-security.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md) · [docs/gcp/database-production.md](docs/gcp/database-production.md)
 
 ---
 
@@ -74,9 +75,9 @@ flowchart TD
 | **Phase 5** | Docker Containerization | ✅ **COMPLETE** | `v0.5.0-phase5` |
 | **Phase 6** | GCP Foundation & Platform Baseline ([docs](docs/gcp/README.md)) | ✅ **COMPLETE** | `v0.6.0-phase6` |
 | **Phase 7** | Cloud Run Deployment ([docs](docs/gcp/cloud-run.md)) | ✅ **COMPLETE** | `v0.7.0-phase7` |
-| **Phase 8** | Cloud SQL Integration | 🟡 **UP NEXT** | `v0.8.0-phase8` |
-| **Phase 9** | Cloud Storage & Signed URLs | ⚪ NOT STARTED | `v0.9.0-phase9` |
-| **Phase 10** | Pub/Sub Event Pipelines | ⚪ NOT STARTED | `v1.0.0-phase10` |
+| **Phase 8** | Cloud SQL Integration ([docs](docs/gcp/cloud-sql.md)) | ✅ **COMPLETE** | `v0.8.0-phase8` |
+| **Phase 9** | Cloud Storage & Signed URLs ([docs](docs/gcp/cloud-storage.md)) | ✅ **COMPLETE** | `v0.9.0-phase9` |
+| **Phase 10** | Pub/Sub Event Pipelines | 🟡 **UP NEXT** | `v1.0.0-phase10` |
 | **Phase 11** | Payments & Webhooks | ⚪ NOT STARTED | `v1.1.0-phase11` |
 | **Phase 12** | CI/CD with Workload Identity Federation | ⚪ NOT STARTED | `v1.2.0-phase12` |
 | **Phase 13** | Terraform Infrastructure as Code | ⚪ NOT STARTED | `v1.3.0-phase13` |

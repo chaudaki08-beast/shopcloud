@@ -7,6 +7,9 @@ export interface ProductImageDto {
   url: string;
   isPrimary: boolean;
   altText?: string;
+  storageKey?: string;
+  mimeType?: string;
+  fileSize?: number;
 }
 
 export interface ProductDto {
