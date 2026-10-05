@@ -134,3 +134,65 @@ Verified with `gcloud artifacts docker images list … --include-tags` and `gclo
 
 `npm run build` ✅ · `npm test`: API **105/105** (12 suites), worker **6/6**, `@shopcloud/database` integration suite ✅ ·
 `tsc --noEmit` ✅ · Docker: **NOT AVAILABLE** locally (built and smoke-tested in CI).
+
+---
+
+# Phase 8 Validation — Cloud SQL & Production Database
+
+Captured on **2026-10-05** with Google Cloud SDK 533.0.0 (`asia-south1`, project `project-c3f386b1-6c37-468d-8ee`).
+
+## 1. Cloud SQL Infrastructure Validation
+
+| # | Check | Command | Actual Result | Status |
+| :- | :--- | :--- | :--- | :- |
+| 1 | API Enablement | `gcloud services list --enabled --filter="name:sqladmin*"` | `sqladmin.googleapis.com` enabled | **PASS** |
+| 2 | Cloud SQL Instance | `gcloud sql instances describe shopcloud-postgres` | `RUNNABLE`, `POSTGRES_16`, `db-custom-1-3840`, `asia-south1-c`, 10GB SSD | **PASS** |
+| 3 | Network Security | `gcloud sql instances describe shopcloud-postgres --format="value(settings.ipConfiguration.authorizedNetworks)"` | Empty (zero authorized external IP networks) | **PASS** |
+| 4 | Application Database | `gcloud sql databases list --instance=shopcloud-postgres` | `shopcloud` (UTF8, en_US.UTF8) | **PASS** |
+| 5 | Application User | `gcloud sql users list --instance=shopcloud-postgres` | `shopcloud_app` (dedicated non-superuser) | **PASS** |
+| 6 | Secret Manager Integration | `gcloud secrets versions list shopcloud-dev-database-url` | Version 2 active with pool parameters (`connection_limit=10&pool_timeout=20`) | **PASS** |
+| 7 | IAM Permissions | `gcloud projects get-iam-policy ...` | `roles/cloudsql.client` granted to `shopcloud-api-runtime` | **PASS** |
+| 8 | Cloud Run Connection | `gcloud run services describe shopcloud-api` | `--add-cloudsql-instances` attached; revision `shopcloud-api-00006-b95` | **PASS** |
+| 9 | Baseline Backup | `gcloud sql backups list --instance=shopcloud-postgres` | Backup ID `1791191580964` (`SUCCESSFUL`) | **PASS** |
+
+## 2. Database Schema & Migration Validation
+
+| Check | Command | Actual Result | Status |
+| :--- | :--- | :--- | :- |
+| Migration Deployment | `prisma migrate deploy` | 3 migrations applied cleanly (`20261003090131`, `20261003120541`, `20261004085326`) | **PASS** |
+| Migration Status | `prisma migrate status` | `Database schema is up to date!` (0 pending migrations) | **PASS** |
+| Model Validation | Information Schema inspection | 21 tables created and verified | **PASS** |
+| Production Seed | `npm run db:seed:prod` | 6 Categories, 6 Products, 19 Permissions, 51 RolePermissions, 1 Coupon, 0 dev accounts | **PASS** |
+
+## 3. Real Cloud Run + Cloud SQL E2E Smoke Tests (39/39 Passed)
+
+Executed against live production deployment `https://shopcloud-api-24903284190.asia-south1.run.app`:
+
+| Test Group | Tests Executed | Result | Status |
+| :--- | :--- | :--- | :- |
+| **Health Check** | `/api/v1/health` probes PostgreSQL via Unix socket | HTTP 200, `database: healthy`, latency 7ms | **PASS** |
+| **Catalog** | Categories list, Products list, Product detail by ID | HTTP 200, 6 categories, 6 products verified | **PASS** |
+| **Authentication** | Register new user, Login, Profile (`/auth/me`), Token rotation | HTTP 201/200, JWT issued, permissions linked | **PASS** |
+| **RBAC Security** | Customer account attempts access to `/api/v1/admin/dashboard` | HTTP 403 Forbidden | **PASS** |
+| **Cart Operations** | Get cart, add item, update quantity (2 -> 3) | HTTP 200/201, server-side calculated totals | **PASS** |
+| **Order Placement** | Transactional checkout (`ORD-002513-9538`) | HTTP 201, status `CONFIRMED`, line items created | **PASS** |
+| **Inventory Decrement** | Cloud SQL inventory verification post-order | Stock decremented in DB from 10 to 7 | **PASS** |
+| **Order Retrieval** | Order detail by ID, User order history list | HTTP 200, ownership verified | **PASS** |
+| **Session Revocation** | User logout, revoked refresh token reuse attempt | HTTP 200 on logout; HTTP 401 on token reuse | **PASS** |
+
+## 4. Transaction Integrity & Failure Rollback (9/9 Passed)
+
+| Invariant | Test | Result | Status |
+| :--- | :--- | :--- | :- |
+| **Unique Constraint** | Insert duplicate email into `User` table | Throws Prisma error `P2002` | **PASS** |
+| **Foreign Key Constraint** | Insert `OrderItem` referencing non-existent `orderId` | Throws Prisma error `P2003` | **PASS** |
+| **Transaction Rollback** | Simulated exception midway through `$transaction` stock decrement | Exception caught; stock restored cleanly | **PASS** |
+| **Audit & History** | Insert and query `OrderStatusHistory` and `InventoryMovement` | Verified records in Cloud SQL | **PASS** |
+
+## 5. Security & Secret Exposure Audit
+
+- Repository scanned: Zero production passwords, tokens, or plaintext secrets committed.
+- Cloud Run inspect: All secrets injected via Secret Manager references (`valueFrom.secretKeyRef`).
+- Cloud Run logs: Inspected logs for `shopcloud-api`; zero credential leakage.
+- Cloud SQL network: Direct public access disabled.
+
