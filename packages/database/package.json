@@ -12,10 +12,12 @@
     "db:status": "dotenv -e ../../.env -- prisma migrate status --schema=prisma/schema.prisma",
     "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force --schema=prisma/schema.prisma",
     "db:seed": "dotenv -e ../../.env -- ts-node src/seed.ts",
+    "db:seed:prod": "dotenv -e ../../.env -- ts-node src/seed-prod.ts",
     "test": "dotenv -e ../../.env -- ts-node test/database.test.ts",
     "prisma:generate": "npm run db:generate",
     "prisma:migrate": "npm run db:migrate",
-    "prisma:seed": "npm run db:seed"
+    "prisma:seed": "npm run db:seed",
+    "prisma:seed:prod": "npm run db:seed:prod"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
