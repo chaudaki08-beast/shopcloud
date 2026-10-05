@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-phase9] — Phase 9: Google Cloud Storage & Object Storage (2026-10-05)
+
+### Added
+* Production Google Cloud Storage (GCS) bucket `shopcloud-media-24903284190` in `asia-south1` with `STANDARD` storage class, Uniform Bucket-Level Access (UBLA), and Public Access Prevention (`enforced`).
+* GCS lifecycle configuration rule to automatically abort incomplete multipart uploads after 7 days (`AbortIncompleteMultipartUpload`).
+* Least-privilege IAM binding on the bucket granting `roles/storage.objectUser` to the Cloud Run runtime service account `shopcloud-api-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com`.
+* Prisma schema migration `20261005102731_add_product_image_storage_metadata` deployed to Cloud SQL, adding `storageKey`, `mimeType`, and `fileSize` columns with indexing on `ProductImage`.
+* `StorageService` (`apps/api/src/modules/storage`) wrapping `@google-cloud/storage` with multi-tier validation: 5 MB size limit, strict MIME whitelisting (`image/jpeg`, `image/png`, `image/webp`), and binary magic byte signature verification to defeat file extension / header spoofing.
+* Deterministic collision-free object naming strategy: `products/{productId}/{uuid}.{ext}` with product ID path sanitization.
+* REST API endpoints for product image operations:
+  - `POST /api/v1/products/:id/images`: Uploads image, verifies magic bytes, streams to GCS, and saves metadata in PostgreSQL (protected by `SUPER_ADMIN`, `STORE_ADMIN`, `INVENTORY_MANAGER`).
+  - `GET /api/v1/products/:id/images`: Retrieves all product image metadata.
+  - `GET /api/v1/products/:id/images/:imageId`: Retrieves single image metadata.
+  - `GET /api/v1/products/:id/images/:imageId/file`: High-performance binary proxy stream with Content-Type and Cache-Control headers.
+  - `GET /api/v1/products/:id/images/:imageId/signed-url`: Generates 15-minute time-limited Google Cloud V4 signed URL with proxy stream fallback.
+  - `PATCH /api/v1/products/:id/images/:imageId/primary`: Atomically sets primary product image within an ACID transaction.
+  - `DELETE /api/v1/products/:id/images/:imageId`: Atomically deletes metadata from database and purges object from GCS bucket.
+* Offline in-memory buffer fallback in `StorageService` enabling 100% deterministic test execution without internet connectivity or cloud credentials during unit testing (`process.env.JEST_WORKER_ID`).
+* 21 new unit tests in `apps/api` (`storage.service.spec.ts` and `products-images.spec.ts`).
+* Real live E2E validation against Cloud Run, Cloud SQL, and GCS (31/31 tests passing, 0 failures).
+* Comprehensive cloud storage documentation in `docs/gcp/cloud-storage.md` and `docs/gcp/storage-security.md`.
+
+---
+
 ## [0.8.0-phase8] — Phase 8: Cloud SQL & Production Database (2026-10-05)
 
 ### Added

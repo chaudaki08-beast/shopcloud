@@ -30,7 +30,11 @@ Everything below was created or observed with real `gcloud` output on 2026-10-04
 | [iam.md](iam.md) | Identities, least-privilege role plan, Workload Identity Federation design and GitHub restriction |
 | [security.md](security.md) | Secret Manager strategy, credential policy, repository credential scan |
 | [cloud-run.md](cloud-run.md) | Phase 7: services, URLs, images, IAM, secrets, probes, scaling, rollback, limitations |
-| [validation.md](validation.md) | Commands run and their actual results |
+| [cloud-sql.md](cloud-sql.md) | Phase 8: Cloud SQL PostgreSQL 16 architecture, specs, connection pooling, backups |
+| [database-production.md](database-production.md) | Phase 8: Production migrations, seeding strategy, operational playbooks |
+| [cloud-storage.md](cloud-storage.md) | Phase 9: Google Cloud Storage bucket architecture, media endpoints, streaming |
+| [storage-security.md](storage-security.md) | Phase 9: Object storage security, magic bytes validation, least-privilege IAM |
+| [validation.md](validation.md) | Commands run and their actual results (Phases 6, 7, 8, 9) |
 
 ## Working with the project locally
 
@@ -41,10 +45,11 @@ gcloud config configurations activate shopcloud   # account chaudaki08@gmail.com
 gcloud config configurations activate default     # switch back to other work
 ```
 
-## Live endpoints (Phase 7)
+## Live endpoints (Phase 9)
 
 - Web: https://shopcloud-web-24903284190.asia-south1.run.app
-- API: https://shopcloud-api-24903284190.asia-south1.run.app (health: `/api/v1/health/liveness`)
+- API: https://shopcloud-api-24903284190.asia-south1.run.app
+- Storage Bucket: `gs://shopcloud-media-24903284190` (`asia-south1`)
+- Cloud SQL Instance: `shopcloud-postgres` (PostgreSQL 16, stopped for cost control)
 
-Not yet created: Cloud SQL (Phase 8), application buckets (9), Pub/Sub topics (10), GKE (17), Terraform (13),
-automated deployment (12).
+Next phase: Pub/Sub Event Pipelines (Phase 10).

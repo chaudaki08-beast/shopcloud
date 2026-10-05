@@ -42,6 +42,7 @@ DATABASE_URL="postgresql://shopcloud_app:***@127.0.0.1:5434/shopcloud" npx prism
 | `20261003090131_init_shopcloud_schema` | `2026-10-05 08:22:27 UTC` | Baseline schema: User, Product, Category, Order, Cart, Payment, Shipment, AuditLog |
 | `20261003120541_add_auth_rbac_and_refresh_tokens` | `2026-10-05 08:22:28 UTC` | RefreshToken rotation, Permission, and RolePermission matrices |
 | `20261004085326_add_auth_rate_limits` | `2026-10-05 08:22:28 UTC` | Distributed IP/route authentication rate-limiting table |
+| `20261005102731_add_product_image_storage_metadata` | `2026-10-05 10:30:15 UTC` | ProductImage storageKey, mimeType, and fileSize fields with index |
 
 **Verification Status**: `Database schema is up to date!` (Zero pending migrations).
 
