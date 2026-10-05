@@ -60,3 +60,7 @@ coverage/
 dev.db
 dev.db-journal
 .pgdata/
+
+# Local Uploads
+.uploads/
+
