@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0-phase8] — Phase 8: Cloud SQL & Production Database (2026-10-05)
+
+### Added
+* Managed Google Cloud SQL PostgreSQL 16 Enterprise instance `shopcloud-postgres` in `asia-south1-c` (`db-custom-1-3840`, 1 vCPU, 3.75 GB RAM, 10 GB SSD with auto-increase, deletion protection, daily backups).
+* Application database `shopcloud` with dedicated non-superuser `shopcloud_app` following least-privilege principles.
+* Production Prisma migrations executed via `prisma migrate deploy` over secure IAM-authenticated Cloud SQL Auth Proxy v2 (zero pending migrations).
+* Deterministic safe production seed (`packages/database/src/seed-prod.ts`) initializing categories, fine-grained permissions, role-permission matrices, initial products, images, and welcome coupons with strictly ZERO insecure demo credentials.
+* Google Secret Manager integration for `shopcloud-dev-database-url` (version 2) with bounded connection pooling (`connection_limit=10&pool_timeout=20`).
+* Project IAM binding granting `roles/cloudsql.client` to `shopcloud-api-runtime` service account.
+* Cloud Run `shopcloud-api` connected to Cloud SQL via native Unix domain socket (`--add-cloudsql-instances`) at revision `shopcloud-api-00006-b95`.
+* Comprehensive automated baseline backup created and verified in Cloud SQL (Backup ID `1791191580964`).
+* Full E2E smoke tests and transaction rollback validation passing against live Cloud Run and Cloud SQL (39/39 smoke tests passed; 9/9 constraint and ACID rollback tests passed).
+* Comprehensive GCP documentation in `docs/gcp/cloud-sql.md` and `docs/gcp/database-production.md`.
+
+### Fixed
+* Fixed root Jest test execution in `apps/api` by loading environment variables with `dotenv -e ../../.env`.
+* Fixed local development PostgreSQL configuration to bind explicitly to port 5433, avoiding conflict with system-level port 5432.
+* Populated Secret Manager container `shopcloud-dev-jwt-refresh-secret` with high-entropy cryptographic secret.
+
+---
+
 ## [0.7.0-phase7] — Phase 7: Cloud Run Deployment (2026-10-04)
 
 ### Added

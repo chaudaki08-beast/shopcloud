@@ -6,7 +6,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main",
-    "test": "jest"
+    "test": "dotenv -e ../../.env -- jest"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^4.7.1",
