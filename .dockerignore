@@ -34,6 +34,7 @@ credentials.json
 
 # Local Database Files & Logs
 .pgdata
+.uploads
 *.log
 pg_hba.conf
 pg_ident.conf
