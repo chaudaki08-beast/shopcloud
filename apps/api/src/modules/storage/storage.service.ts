@@ -37,6 +37,7 @@ export class StorageService {
   private readonly bucket: Bucket;
   private isGcsActive = false;
   private readonly localStorageDir: string;
+  private readonly memoryStore = new Map<string, { buffer: Buffer; mimeType: string; size: number }>();
 
   constructor() {
     this.bucketName =
@@ -46,12 +47,22 @@ export class StorageService {
 
     this.localStorageDir = path.resolve(process.cwd(), '.uploads');
 
-    try {
-      this.storage = new Storage();
-      this.bucket = this.storage.bucket(this.bucketName);
-      this.isGcsActive = true;
-    } catch (err: any) {
-      this.logger.warn(`GCS client initialization notice: ${err?.message}. Local fallback active.`);
+    const isTestOrLocal = Boolean(
+      process.env.JEST_WORKER_ID ||
+      process.env.NODE_ENV === 'test' ||
+      process.env.STORAGE_DRIVER === 'local'
+    );
+
+    if (!isTestOrLocal) {
+      try {
+        this.storage = new Storage();
+        this.bucket = this.storage.bucket(this.bucketName);
+        this.isGcsActive = true;
+      } catch (err: any) {
+        this.logger.warn(`GCS client initialization notice: ${err?.message}. Local fallback active.`);
+        this.isGcsActive = false;
+      }
+    } else {
       this.isGcsActive = false;
     }
   }
@@ -167,10 +178,12 @@ export class StorageService {
       this.logger.warn(`GCS upload failed: ${err?.message}. Falling back to local storage.`);
     }
 
-    // Local filesystem storage fallback for testing / offline dev
-    const localFilePath = path.join(this.localStorageDir, storageKey);
-    fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
-    fs.writeFileSync(localFilePath, file.buffer);
+    // In-memory fallback for testing / offline dev
+    this.memoryStore.set(storageKey, {
+      buffer: Buffer.from(file.buffer),
+      mimeType,
+      size: file.size,
+    });
 
     return {
       storageKey,
@@ -198,19 +211,13 @@ export class StorageService {
       }
     }
 
-    // Check local fallback
-    const localFilePath = path.join(this.localStorageDir, storageKey);
-    if (fs.existsSync(localFilePath)) {
-      const stats = fs.statSync(localFilePath);
-      const ext = path.extname(storageKey).toLowerCase();
-      let contentType = 'image/jpeg';
-      if (ext === '.png') contentType = 'image/png';
-      if (ext === '.webp') contentType = 'image/webp';
-
+    // In-memory fallback
+    const inMem = this.memoryStore.get(storageKey);
+    if (inMem) {
       return {
-        stream: fs.createReadStream(localFilePath),
-        contentType,
-        contentLength: stats.size,
+        stream: Readable.from(inMem.buffer),
+        contentType: inMem.mimeType,
+        contentLength: inMem.size,
       };
     }
 
@@ -228,8 +235,7 @@ export class StorageService {
       }
     }
 
-    const localFilePath = path.join(this.localStorageDir, storageKey);
-    return fs.existsSync(localFilePath);
+    return this.memoryStore.has(storageKey);
   }
 
   async deleteFile(storageKey: string): Promise<boolean> {
@@ -249,14 +255,9 @@ export class StorageService {
       }
     }
 
-    const localFilePath = path.join(this.localStorageDir, storageKey);
-    if (fs.existsSync(localFilePath)) {
-      try {
-        fs.unlinkSync(localFilePath);
-        deleted = true;
-      } catch {
-        // ignore
-      }
+    if (this.memoryStore.has(storageKey)) {
+      this.memoryStore.delete(storageKey);
+      deleted = true;
     }
 
     return deleted;
