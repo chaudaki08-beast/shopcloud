@@ -132,7 +132,7 @@ async function bootstrapWorkers() {
       apiEndpoint: emulatorHost,
     });
 
-    const subscriptionName = `${projectId}-inventory-sub`;
+    const subscriptionName = process.env.PUBSUB_SUBSCRIPTION || 'shopcloud-inventory-sub';
     try {
       subscription = pubsub.subscription(subscriptionName);
 

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.0-phase10] — Phase 10: Google Cloud Pub/Sub & Event-Driven Workers (2026-10-09)
+
+### Added
+* Google Cloud Pub/Sub production event streaming infrastructure in `asia-south1` (Project `project-c3f386b1-6c37-468d-8ee`):
+  - Primary topic `shopcloud-domain-events` with 7-day retention.
+  - Dead-letter topics `shopcloud-inventory-dlq` and `shopcloud-notification-dlq`.
+  - Worker subscriptions `shopcloud-inventory-sub` and `shopcloud-notification-sub` with message ordering enabled (`--enable-message-ordering`), dead-letter policies (`max-delivery-attempts=5`), and exponential retry backoff (10s–600s).
+  - Dead-letter operator review subscriptions `shopcloud-inventory-dlq-sub` and `shopcloud-notification-dlq-sub`.
+* IAM least-privilege policies:
+  - Pub/Sub service agent granted `roles/pubsub.publisher` on DLQ topics and `roles/pubsub.subscriber` on worker subscriptions.
+  - `shopcloud-api-runtime` granted `roles/pubsub.publisher` on `shopcloud-domain-events`.
+  - `shopcloud-worker-runtime` granted `roles/pubsub.subscriber` on worker subscriptions and `roles/pubsub.publisher` on domain events topic.
+* Canonical domain event taxonomy in `@shopcloud/contracts`: `order.created.v1`, `order.confirmed.v1`, `order.cancelled.v1`, `inventory.reservation.requested.v1`, `inventory.reserved.v1`, `inventory.released.v1`, `notification.requested.v1`.
+* Standard `EventEnvelope<T>` schema and CNCF CloudEvents v1.0 bidirectional converter (`toCloudEvent`, `fromCloudEvent`).
+* Transactional Outbox Pattern in `@shopcloud/database` and `apps/api`:
+  - `OutboxEvent` PostgreSQL model with indices on `[status, availableAt]`, `[aggregateType, aggregateId]`, and `correlationId`.
+  - `OutboxService` in `apps/api` recording outbox entries within the same ACID `$transaction` as order creation, eliminating dual-write risks.
+  - Immediate outbox dispatcher with optimistic claiming and exponential retry backoff.
+* Durable Consumer Idempotency in `@shopcloud/database` and `apps/workers`:
+  - `ProcessedEvent` PostgreSQL model with unique constraint on `[eventId, consumer]` preventing duplicate execution during Pub/Sub at-least-once delivery.
+* Worker services (`apps/workers`):
+  - `InventoryWorker`: Processes `order.created.v1` and `inventory.released.v1`, atomically checks stock, enforces non-negative constraints, records `InventoryMovement` audit log, inserts `ProcessedEvent` marker, and emits downstream `inventory.reserved.v1` and `notification.requested.v1`.
+  - `NotificationWorker`: Processes `notification.requested.v1`, verifies idempotency, and records communication state in `Notification` table with `correlationId`.
+  - Dual delivery mode: streaming pull daemon or Cloud Run push endpoint with OIDC JWT verification against Google OAuth2 certs.
+* Prisma migration `20261008120000_add_outbox_and_idempotency` deployed and verified on Cloud SQL.
+* 10/10 live end-to-end integration tests passed against live Google Cloud SQL and live GCP Pub/Sub.
+* Cloud SQL instance stopped (`NEVER`) immediately following live validation to guarantee $0 compute spend.
+* Architecture documentation in `docs/gcp/pubsub.md`, `docs/gcp/event-driven-architecture.md`, and `docs/gcp/workers.md`.
+
+---
+
 ## [0.9.0-phase9] — Phase 9: Google Cloud Storage & Object Storage (2026-10-05)
 
 ### Added
