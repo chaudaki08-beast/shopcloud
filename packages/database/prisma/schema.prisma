@@ -368,8 +368,45 @@ model Notification {
   status         String   @default("SENT")
   variables      Json     @default("{}")
   orderId        String?
+  correlationId  String?
   createdAt      DateTime @default(now())
 
   @@index([recipientEmail])
   @@index([orderId])
+  @@index([correlationId])
 }
+
+model OutboxEvent {
+  id            String    @id @default(uuid())
+  eventId       String    @unique
+  eventType     String
+  eventVersion  String    @default("v1")
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  correlationId String?
+  causationId   String?
+  status        String    @default("PENDING") // PENDING, PUBLISHED, FAILED
+  attempts      Int       @default(0)
+  lastError     String?
+  availableAt   DateTime  @default(now())
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([correlationId])
+}
+
+model ProcessedEvent {
+  id          String   @id @default(uuid())
+  eventId     String
+  consumer    String
+  eventType   String?
+  processedAt DateTime @default(now())
+
+  @@unique([eventId, consumer])
+  @@index([consumer, processedAt])
+}
+

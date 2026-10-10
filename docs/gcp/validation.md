@@ -256,4 +256,54 @@ Executed against live production deployment `https://shopcloud-api-24903284190.a
 * Cloud SQL activation policy patched to `NEVER` immediately following test completion.
 * Current state: `STOPPED` ($0 compute spend).
 
+---
+
+# Phase 10 Validation — Pub/Sub Event-Driven Architecture & Workers
+
+Captured on **2026-10-09** against live Google Cloud Platform (`asia-south1`, project `project-c3f386b1-6c37-468d-8ee`).
+
+## 1. Pub/Sub Infrastructure Validation
+
+| # | Check | Target / Command | Actual Result | Status |
+| :- | :--- | :--- | :--- | :- |
+| 1 | API Enablement | `gcloud services list --enabled --filter="name:pubsub*"` | `pubsub.googleapis.com` enabled | **PASS** |
+| 2 | Topics Provisioned | `gcloud pubsub topics list` | `shopcloud-domain-events`, `shopcloud-inventory-dlq`, `shopcloud-notification-dlq` created | **PASS** |
+| 3 | Worker Subscriptions | `gcloud pubsub subscriptions list` | `shopcloud-inventory-sub`, `shopcloud-notification-sub` (with ordering & DLQ policies) | **PASS** |
+| 4 | DLQ Subscriptions | `gcloud pubsub subscriptions list` | `shopcloud-inventory-dlq-sub`, `shopcloud-notification-dlq-sub` (7d retention) | **PASS** |
+| 5 | Pub/Sub Service Agent IAM | `gcloud pubsub *-iam-policy-binding` | Granted `roles/pubsub.publisher` on DLQ topics & `roles/pubsub.subscriber` on worker subscriptions | **PASS** |
+| 6 | Cloud Run API Runtime IAM | `gcloud pubsub topics add-iam-policy-binding` | `roles/pubsub.publisher` granted on `shopcloud-domain-events` to `shopcloud-api-runtime` | **PASS** |
+| 7 | Worker Runtime IAM | `gcloud pubsub *-iam-policy-binding` | `roles/pubsub.subscriber` on worker subscriptions and `roles/pubsub.publisher` on domain events topic | **PASS** |
+
+## 2. Cloud SQL Database Migration
+
+| Check | Target / Command | Actual Result | Status |
+| :--- | :--- | :--- | :- |
+| Migration Deployment | `prisma migrate deploy` | `20261008120000_add_outbox_and_idempotency` applied cleanly to Cloud SQL | **PASS** |
+| Schema Status | `prisma migrate status` | `Database schema is up to date!` (5 migrations, 0 pending) | **PASS** |
+| Table Verification | Information Schema query | `OutboxEvent`, `ProcessedEvent`, and updated `Notification` tables confirmed | **PASS** |
+
+## 3. Real Cloud SQL + GCP Pub/Sub E2E Validation (10/10 Passed)
+
+Executed against live Cloud SQL PostgreSQL (`shopcloud-postgres`) and live Google Cloud Pub/Sub topics:
+
+| Test | Objective | Observed Result | Status |
+| :--- | :--- | :--- | :- |
+| **TEST 1** | Schema & Database Connectivity | `OutboxEvent`, `ProcessedEvent`, `Notification` tables verified via SQL probe | **PASS** |
+| **TEST 2** | GCP Pub/Sub Topics & Subscriptions | All 3 topics and 4 subscriptions verified active in `project-c3f386b1-6c37-468d-8ee` | **PASS** |
+| **TEST 3** | Fixture Initialization | Test Customer, Category, and Product (stock: 50) initialized in Cloud SQL | **PASS** |
+| **TEST 4** | Transactional Outbox Placement | Atomically committed Order & `OutboxEvent` with status `PENDING` | **PASS** |
+| **TEST 5** | Outbox Dispatch to GCP Pub/Sub | Published with orderingKey `orderId` to `shopcloud-domain-events`; status updated to `PUBLISHED` | **PASS** |
+| **TEST 6** | Inventory Worker Execution | Stock decremented (50 → 47), `InventoryMovement` logged (`ORDER_RESERVED`), downstream events published | **PASS** |
+| **TEST 7** | Durable Idempotency Ledger | Verified `ProcessedEvent` record created with consumer `inventory-worker` | **PASS** |
+| **TEST 8** | Replay & Duplicate Message Guard | Replayed identical event; worker safely returned `DUPLICATE_IGNORED` and stock remained intact | **PASS** |
+| **TEST 9** | Notification Worker Execution | Downstream event processed; `Notification` record created in Cloud SQL with `correlationId` | **PASS** |
+| **TEST 10** | Dead-Letter Queue Policy Check | Verified max delivery attempts = 5, retry backoff (10s–600s), and DLQ topic routing | **PASS** |
+
+## 4. Cost Control Verification
+
+* Cloud SQL proxy terminated immediately after test execution.
+* Cloud SQL instance `shopcloud-postgres` patched back to `NEVER`.
+* Verified instance state: `STOPPED` ($0 compute spend maintained).
+
+
 

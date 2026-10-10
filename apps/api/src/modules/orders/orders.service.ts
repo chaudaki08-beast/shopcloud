@@ -9,8 +9,12 @@ import {
   OrderResponseDto,
   OrderStatus,
   UserRole,
+  EventEnvelope,
+  EVENT_TYPES,
+  OrderCreatedPayload,
 } from '@shopcloud/contracts';
 import { CartService } from '../cart/cart.service';
+import { OutboxService } from '../events/outbox.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStateMachine } from './order-state-machine';
 import { useDatabase } from '../../db-status';
@@ -28,7 +32,10 @@ export class OrdersService {
   private localOrders: OrderResponseDto[] = [];
   private statusHistory: StatusTransitionRecord[] = [];
 
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly outboxService: OutboxService,
+  ) {}
 
   async createOrder(userId: string, dto: CreateOrderDto): Promise<OrderResponseDto> {
     const cartSummary = await this.cartService.getCart(userId);
@@ -142,10 +149,47 @@ export class OrdersService {
             where: { cart: { userId } },
           });
 
-          return order;
+          // 4. Record transactional Outbox Event (order.created.v1)
+          const eventId = `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          const correlationId = dto.correlationId || `corr-${order.id}`;
+
+          const orderCreatedPayload: OrderCreatedPayload = {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            userId: order.userId,
+            userEmail: order.user?.email || '',
+            items: order.items.map((i) => ({
+              productId: i.productId,
+              sku: i.sku,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+            })),
+            totalAmount: order.grandTotal,
+            currency: order.currency,
+            createdAt: order.createdAt.toISOString(),
+          };
+
+          const envelope: EventEnvelope<OrderCreatedPayload> = {
+            eventId,
+            eventType: EVENT_TYPES.ORDER_CREATED_V1,
+            eventVersion: 'v1',
+            occurredAt: new Date().toISOString(),
+            producer: 'shopcloud-api',
+            correlationId,
+            aggregateType: 'Order',
+            aggregateId: order.id,
+            payload: orderCreatedPayload,
+          };
+
+          await this.outboxService.recordEvent(tx, envelope);
+
+          return { order, eventId };
         });
 
-        return this.formatOrder(createdOrder);
+        // Trigger immediate outbox dispatch (asynchronous, non-blocking)
+        void this.outboxService.dispatchImmediate(createdOrder.eventId);
+
+        return this.formatOrder(createdOrder.order);
         }
       } catch (err) {
         rethrowInProduction(err);

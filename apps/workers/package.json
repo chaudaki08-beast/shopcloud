@@ -6,7 +6,8 @@
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
-    "test": "node --require ts-node/register --test test/runtime-config.test.ts"
+    "test": "node --require ts-node/register --test test/*.test.ts",
+    "test:live": "dotenv -e ../../.env -- ts-node -P tsconfig.json test/validate-phase10-live.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^4.7.1",

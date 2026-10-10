@@ -1,5 +1,6 @@
 import { OrdersService } from './orders.service';
 import { CartService } from '../cart/cart.service';
+import { OutboxService } from '../events/outbox.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrderStatus } from '@shopcloud/contracts';
 import { InvalidOrderStateTransitionException } from './order-state-machine';
@@ -7,11 +8,16 @@ import { InvalidOrderStateTransitionException } from './order-state-machine';
 describe('OrdersService', () => {
   let ordersService: OrdersService;
   let cartService: CartService;
+  let outboxService: any;
   const testUserId = 'test-order-user-1';
 
   beforeEach(() => {
     cartService = new CartService();
-    ordersService = new OrdersService(cartService);
+    outboxService = {
+      recordEvent: jest.fn().mockResolvedValue({ id: 'outbox-1' }),
+      dispatchImmediate: jest.fn().mockResolvedValue(true),
+    };
+    ordersService = new OrdersService(cartService, outboxService as OutboxService);
   });
 
   const validShippingAddress = {

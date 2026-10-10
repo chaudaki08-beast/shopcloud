@@ -57,6 +57,7 @@ export enum PaymentStatus {
 }
 
 export enum PubSubTopic {
+  DOMAIN_EVENTS = 'shopcloud-domain-events',
   ORDER_CREATED = 'order-created',
   PAYMENT_COMPLETED = 'payment-completed',
   PAYMENT_FAILED = 'payment-failed',
@@ -64,4 +65,6 @@ export enum PubSubTopic {
   ORDER_SHIPPED = 'order-shipped',
   ORDER_DELIVERED = 'order-delivered',
   NOTIFICATION_REQUESTED = 'notification-requested',
+  INVENTORY_DLQ = 'shopcloud-inventory-dlq',
+  NOTIFICATION_DLQ = 'shopcloud-notification-dlq',
 }

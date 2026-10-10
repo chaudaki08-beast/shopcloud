@@ -826,6 +826,15 @@ export class ProductsService {
       }
     }
 
+    // In-memory fallback
+    const imgIndex = (product.images || []).findIndex((i) => i.id === imageId);
+    if (imgIndex !== -1) {
+      const [removed] = product.images.splice(imgIndex, 1);
+      if (removed.storageKey) {
+        await this.storageService.deleteFile(removed.storageKey);
+      }
+    }
+
     return { success: true, message: `Image '${imageId}' deleted successfully` };
   }
 }
