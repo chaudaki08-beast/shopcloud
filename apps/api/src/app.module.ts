@@ -7,6 +7,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CartModule } from './modules/cart/cart.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { AdminModule } from './modules/admin/admin.module';
 
 /** Releases the shared Prisma connection pool when Cloud Run sends SIGTERM (enableShutdownHooks in main.ts). */
@@ -26,6 +27,7 @@ export class PrismaShutdownHook implements OnApplicationShutdown {
     CategoriesModule,
     CartModule,
     OrdersModule,
+    PaymentsModule,
     AdminModule,
   ],
   providers: [PrismaShutdownHook],
