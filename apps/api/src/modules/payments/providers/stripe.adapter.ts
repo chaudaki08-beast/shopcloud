@@ -11,7 +11,7 @@ import {
 
 export class StripePaymentAdapter implements PaymentProvider {
   public readonly providerName = 'STRIPE_SANDBOX';
-  private readonly webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_mock_stripe_webhook';
+  private readonly webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_stripe_secret_shopcloud';
 
   async createSession(params: CreatePaymentSessionParams): Promise<PaymentSessionResult> {
     const providerRef = `cs_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
