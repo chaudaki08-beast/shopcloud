@@ -305,5 +305,44 @@ Executed against live Cloud SQL PostgreSQL (`shopcloud-postgres`) and live Googl
 * Cloud SQL instance `shopcloud-postgres` patched back to `NEVER`.
 * Verified instance state: `STOPPED` ($0 compute spend maintained).
 
+---
+
+# Phase 11 Validation — Payment Processing, Webhooks & Order Lifecycle
+
+Captured on **2026-10-10** against live Google Cloud Platform (`asia-south1`, project `project-c3f386b1-6c37-468d-8ee`).
+
+## 1. Cloud SQL Database Migration
+
+| Check | Target / Command | Actual Result | Status |
+| :--- | :--- | :--- | :- |
+| Migration Deployment | `prisma migrate deploy` | `20261010120000_add_payment_transaction_indices` applied cleanly to Cloud SQL | **PASS** |
+| Schema Status | `prisma migrate status` | `Database schema is up to date!` (6 migrations, 0 pending) | **PASS** |
+| Index Verification | `pg_indexes` query | `Payment_transactionRef_idx` and `PaymentEvent_providerRef_idx` confirmed active | **PASS** |
+
+## 2. Real Cloud SQL Live Payment Validation (10/10 Passed)
+
+Executed against live Cloud SQL PostgreSQL (`shopcloud-postgres`):
+
+| Test | Objective | Observed Result | Status |
+| :--- | :--- | :--- | :- |
+| **TEST 1** | Schema & Database Indexes | Verified `Payment_transactionRef_idx` and `PaymentEvent_providerRef_idx` via SQL catalog query | **PASS** |
+| **TEST 2** | Fixture Initialization | Test Customer, Category, and Product (stock: 10) created in Cloud SQL | **PASS** |
+| **TEST 3** | Server-Authoritative Initiation | Initiated payment for ₹1,999 (199900 paise); status `PENDING`, outbox event `payment.initiated.v1` recorded | **PASS** |
+| **TEST 4** | Idempotency Verification | Duplicate initiation resolved to existing payment without duplicate rows | **PASS** |
+| **TEST 5** | Signed Webhook Processing | HMAC-SHA256 signature verified; Payment `SUCCESS`, Order `CONFIRMED`, outbox event `payment.succeeded.v1` recorded | **PASS** |
+| **TEST 6** | Durable Replay Deduplication | Webhook replay deduplicated via `ProcessedEvent` ledger (`DUPLICATE_IGNORED`) | **PASS** |
+| **TEST 7** | Admin Refund Lifecycle | Admin-issued refund; Payment `REFUNDED`, Order `REFUNDED`, outbox event `payment.refunded.v1` recorded | **PASS** |
+| **TEST 8** | ACID Compensation & Stock Release | Payment failure webhook cancelled order, restored stock (8 → 10), logged `InventoryMovement`, recorded `payment.failed.v1` | **PASS** |
+| **TEST 9** | Outbox Event Verification | Outbox events verified in Cloud SQL with matching correlation IDs | **PASS** |
+| **TEST 10** | Fixture Sanitization | Cleanly removed temporary test rows from Cloud SQL | **PASS** |
+
+## 3. Cost Control Verification
+
+* Cloud SQL Auth Proxy terminated immediately after validation completion.
+* Cloud SQL instance `shopcloud-postgres` patched back to `NEVER`.
+* Final verified instance state: `STOPPED` ($0 compute spend maintained).
+* **Cost Status: NO BILLABLE USAGE OBSERVED / CONFIGURED FOR MINIMAL COST.**
+
+
 
 

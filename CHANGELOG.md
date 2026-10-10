@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.11.0-phase11] — Phase 11: Payment Processing, Webhooks & Order Lifecycle (2026-10-10)
+
+### Added
+* Provider-independent payment gateway abstraction (`PaymentProvider`) with pluggable adapter architecture:
+  - `TestPaymentAdapter`: Deterministic in-memory and HMAC cryptographic test adapter designed for CI/CD and cost-free local/staging testing.
+  - `RazorpayPaymentAdapter`: Indian market adapter with `x-razorpay-signature` verification and integer INR paise calculations for UPI, Cards, and NetBanking.
+  - `StripePaymentAdapter`: Global payment intent adapter with 300-second timestamp replay tolerance and `stripe-signature` v1 HMAC verification.
+* Server-Authoritative Financial Calculation:
+  - Payment amounts are strictly derived from `order.grandTotal` in minor currency units (paise) inside database transactions.
+  - Client-supplied amounts are ignored or rejected, preventing price tampering.
+* Cryptographic Webhook Security:
+  - Preserved byte-exact raw bodies with `rawBody: true` in NestJS application options.
+  - Constant-time HMAC-SHA256 signature verification (`crypto.timingSafeEqual`) defeating timing attack vectors.
+* Durable Idempotency Ledger:
+  - Replay-protected webhook processing leveraging `ProcessedEvent` table unique constraint `[eventId, consumer]`.
+  - Duplicate webhook deliveries safely return `DUPLICATE_IGNORED` without executing secondary state mutations.
+* ACID Inventory Compensation & Stock Release:
+  - Atomic inventory restoration on payment failure (`PAYMENT_FAILED`) or admin-initiated refund (`REFUNDED`).
+  - Audited via `InventoryMovement` with reasons `ORDER_PAYMENT_FAILED_RELEASE` and `ORDER_REFUND_RELEASE`.
+* Canonical Domain Events in `@shopcloud/contracts`:
+  - `payment.initiated.v1`, `payment.succeeded.v1`, `payment.failed.v1`, `payment.refunded.v1`.
+  - Atomically recorded in `OutboxEvent` in the same database transaction as payment/order state updates.
+* Prisma migration `20261010120000_add_payment_transaction_indices` adding performance indices on `Payment(transactionRef)` and `PaymentEvent(providerRef)`.
+* Comprehensive test coverage:
+  - 14/14 unit tests passed in `apps/api` (`payments.service.spec.ts`).
+  - 10/10 live tests passed against Google Cloud SQL via Cloud SQL Auth Proxy (`scripts/validate-phase11.ts`).
+* Cost Control Verification:
+  - Cloud SQL activation policy returned to `NEVER` immediately following test completion (`STOPPED`).
+  - Target ₹0 / $0 avoidable spend achieved.
+* Documentation in `docs/payments/` (`README.md`, `payment-lifecycle.md`, `webhook-security.md`, `testing.md`).
+
+---
+
 ## [0.10.0-phase10] — Phase 10: Google Cloud Pub/Sub & Event-Driven Workers (2026-10-09)
 
 ### Added

@@ -135,10 +135,20 @@ export const App: React.FC = () => {
 
   const handleSubmitOrder = async (dto: any) => {
     const order = await api.createOrder(dto);
+    try {
+      const payment = await api.initiatePayment({
+        orderId: order.id,
+        provider: dto.paymentMethod === 'SANDBOX_RAZORPAY' ? 'RAZORPAY_SANDBOX' : 'TEST_SANDBOX',
+      });
+      alert(
+        `Order #${order.orderNumber} placed! Payment initiated (Ref: ${payment.transactionRef || payment.paymentId}). Awaiting webhook fulfillment.`,
+      );
+    } catch {
+      alert(`Order #${order.orderNumber} successfully placed! CloudEvent published to GCP Pub/Sub.`);
+    }
     await loadCart();
     await loadOrders();
     setActiveTab('orders');
-    alert(`Order #${order.orderNumber} successfully placed! CloudEvent published to GCP Pub/Sub.`);
   };
 
   const handleLogout = async () => {

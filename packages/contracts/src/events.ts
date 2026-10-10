@@ -47,6 +47,10 @@ export const EVENT_TYPES = {
   INVENTORY_RESERVED_V1: 'inventory.reserved.v1',
   INVENTORY_RELEASED_V1: 'inventory.released.v1',
   NOTIFICATION_REQUESTED_V1: 'notification.requested.v1',
+  PAYMENT_INITIATED_V1: 'payment.initiated.v1',
+  PAYMENT_SUCCEEDED_V1: 'payment.succeeded.v1',
+  PAYMENT_FAILED_V1: 'payment.failed.v1',
+  PAYMENT_REFUNDED_V1: 'payment.refunded.v1',
 } as const;
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
@@ -141,25 +145,67 @@ export interface NotificationRequestedPayload {
 
 export type NotificationRequestedEvent = NotificationRequestedPayload;
 
-// Future Phase 11 contracts
-export interface PaymentCompletedEvent {
+// ==========================================
+// Payment Event Payloads (Phase 11)
+// ==========================================
+
+export interface PaymentInitiatedPayload {
   paymentId: string;
   orderId: string;
+  orderNumber: string;
   userId: string;
-  amount: number;
+  amount: number; // in paise
+  currency: string;
+  provider: string;
+  idempotencyKey: string;
+  initiatedAt: string;
+}
+
+export type PaymentInitiatedEvent = PaymentInitiatedPayload;
+
+export interface PaymentSucceededPayload {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  userId: string;
+  amount: number; // in paise
   currency: string;
   provider: string;
   transactionRef: string;
-  completedAt: string;
+  succeededAt: string;
 }
 
-export interface PaymentFailedEvent {
+export type PaymentSucceededEvent = PaymentSucceededPayload;
+export type PaymentCompletedEvent = PaymentSucceededPayload; // Backward compatibility alias
+
+export interface PaymentFailedPayload {
+  paymentId?: string;
   orderId: string;
+  orderNumber: string;
   userId: string;
-  amount: number;
+  amount: number; // in paise
+  currency: string;
+  provider: string;
   reason: string;
   failedAt: string;
 }
+
+export type PaymentFailedEvent = PaymentFailedPayload;
+
+export interface PaymentRefundedPayload {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  userId: string;
+  refundAmount: number; // in paise
+  currency: string;
+  provider: string;
+  refundRef: string;
+  reason?: string;
+  refundedAt: string;
+}
+
+export type PaymentRefundedEvent = PaymentRefundedPayload;
 
 // ==========================================
 // Helper functions for Envelope Conversion
