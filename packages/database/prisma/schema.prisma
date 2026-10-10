@@ -310,6 +310,7 @@ model Payment {
 
   @@index([orderId])
   @@index([idempotencyKey])
+  @@index([transactionRef])
 }
 
 model PaymentEvent {
@@ -324,6 +325,7 @@ model PaymentEvent {
 
   @@index([paymentId])
   @@index([eventType])
+  @@index([providerRef])
 }
 
 model Coupon {

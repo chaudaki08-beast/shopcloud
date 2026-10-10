@@ -9,13 +9,14 @@
 > **ShopCloud** is an enterprise-grade, event-driven e-commerce platform engineered specifically to demonstrate production cloud architecture, distributed systems resilience, and site reliability engineering on **Google Cloud Platform (GCP)**.
 
 
-> **Live on Google Cloud (Phase 10):**
+> **Live on Google Cloud (Phase 11):**
 > * **Storefront**: [https://shopcloud-web-24903284190.asia-south1.run.app](https://shopcloud-web-24903284190.asia-south1.run.app)
 > * **API Gateway**: [https://shopcloud-api-24903284190.asia-south1.run.app](https://shopcloud-api-24903284190.asia-south1.run.app)
 > * **API Health & Service Status**: [https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health](https://shopcloud-api-24903284190.asia-south1.run.app/api/v1/health)
+> * **Payment Processing**: Provider abstraction (Test/Razorpay/Stripe), HMAC-SHA256 webhook verification, durable idempotency, and ACID compensation ([docs/payments/README.md](docs/payments/README.md))
 > * **Event Broker**: Google Cloud Pub/Sub (`shopcloud-domain-events`, with ordering & dead-letter policies)
 > * **Object Storage**: Bucket `gs://shopcloud-media-24903284190` (`asia-south1`, UBLA, Public Access Prevention enforced)
-> * **Cloud Architecture Documentation**: [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
+> * **Cloud Architecture Documentation**: [docs/payments/README.md](docs/payments/README.md) · [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
 
 ---
 

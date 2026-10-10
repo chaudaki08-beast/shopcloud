@@ -14,6 +14,11 @@ import {
   LoginRequestDto,
   RegisterRequestDto,
   OrderStatus,
+  InitiatePaymentDto,
+  InitiatePaymentResponseDto,
+  PaymentResponseDto,
+  RefundPaymentDto,
+  RefundPaymentResponseDto,
 } from '@shopcloud/contracts';
 
 const API_BASE = '/api/v1';
@@ -146,6 +151,21 @@ export const api = {
     }),
   cancelOrder: (id: string) =>
     request<OrderResponseDto>(`/orders/${id}/cancel`, { method: 'POST' }),
+
+  // Payments
+  initiatePayment: (dto: InitiatePaymentDto) =>
+    request<InitiatePaymentResponseDto>('/payments/initiate', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    }),
+  getPayment: (id: string) => request<PaymentResponseDto>(`/payments/${id}`),
+  getPaymentsByOrder: (orderId: string) =>
+    request<PaymentResponseDto[]>(`/payments/order/${orderId}`),
+  refundPayment: (id: string, dto: RefundPaymentDto) =>
+    request<RefundPaymentResponseDto>(`/payments/${id}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    }),
 
   // Admin & Health
   getAdminDashboard: () => request<any>('/admin/dashboard'),

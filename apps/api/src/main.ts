@@ -11,7 +11,7 @@ import { buildCorsOptions } from './common/cors';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Enable graceful shutdown for Cloud Run SIGTERM/SIGINT signals
   app.enableShutdownHooks();
@@ -46,6 +46,7 @@ async function bootstrap() {
     .addTag('Categories', 'Hierarchical product category management')
     .addTag('Cart', 'Session cart mutations with authoritative server-side financial calculations')
     .addTag('Orders', 'Atomic order placement, inventory reservation, and lifecycle state-machine')
+    .addTag('Payments', 'Payment processing, webhooks, idempotency, and refunds')
     .addTag('Health', 'GCP Cloud Run liveness and readiness probes')
     .addBearerAuth()
     .build();
