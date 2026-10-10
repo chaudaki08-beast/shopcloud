@@ -59,4 +59,9 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ example: 'corr-0190a2b4-e0c3-7697-b892-000000000001' })
+  @IsString()
+  @IsOptional()
+  correlationId?: string;
 }
