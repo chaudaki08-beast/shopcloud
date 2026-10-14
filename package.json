@@ -21,7 +21,12 @@
     "db:migrate:deploy": "npm run db:migrate:deploy --workspace=@shopcloud/database",
     "db:status": "npm run db:status --workspace=@shopcloud/database",
     "db:reset": "npm run db:reset --workspace=@shopcloud/database",
-    "db:seed": "npm run db:seed --workspace=@shopcloud/database"
+    "db:seed": "npm run db:seed --workspace=@shopcloud/database",
+    "test:load:validate": "node tests/load/validate-scripts.js",
+    "test:load:smoke": "k6 run --duration 10s tests/load/scenarios/health.js",
+    "test:load:catalog": "k6 run --duration 10s tests/load/scenarios/catalog.js",
+    "test:load:events": "k6 run --duration 10s tests/load/scenarios/event-processing.js",
+    "test:load:suite": "k6 run tests/load/index.js"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",

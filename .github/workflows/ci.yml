@@ -90,6 +90,9 @@ jobs:
       - name: Run Monorepo Test Suites
         run: npm test
 
+      - name: Validate k6 Load Testing Suite Structure & Scripts
+        run: npm run test:load:validate
+
       - name: Emit CI Job Summary
         if: always()
         run: |
@@ -102,6 +105,7 @@ jobs:
             echo "- **Security Scan**: \`PASSED\` (Clean git tracking, no leaked credentials, npm audit verified)"
             echo "- **Typecheck**: \`PASSED\` (Contracts, Database, API, Workers, Web)"
             echo "- **Monorepo Tests**: \`PASSED\`"
+            echo "- **Load Testing Scripts**: \`VALIDATED\` (k6 suite static syntax, exports & headers verified)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   docker:

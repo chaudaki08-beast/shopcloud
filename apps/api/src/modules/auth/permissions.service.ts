@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { prisma, Role } from '@shopcloud/database';
 import { UserRole, AppPermission } from '@shopcloud/contracts';
+import { useDatabase } from '../../db-status';
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: Object.values(AppPermission),
@@ -49,18 +50,20 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
 @Injectable()
 export class PermissionsService {
   async getPermissionsForRole(role: string): Promise<string[]> {
-    try {
-      const roleEnum = role as Role;
-      const rolePerms = await prisma.rolePermission.findMany({
-        where: { role: roleEnum },
-        include: { permission: true },
-      });
+    if (await useDatabase()) {
+      try {
+        const roleEnum = role as Role;
+        const rolePerms = await prisma.rolePermission.findMany({
+          where: { role: roleEnum },
+          include: { permission: true },
+        });
 
-      if (rolePerms && rolePerms.length > 0) {
-        return rolePerms.map((rp) => rp.permission.name);
+        if (rolePerms && rolePerms.length > 0) {
+          return rolePerms.map((rp) => rp.permission.name);
+        }
+      } catch {
+        // Fallback to static mapping if database is in mock or offline mode
       }
-    } catch {
-      // Fallback to static mapping if database is in mock or offline mode
     }
 
     return ROLE_PERMISSIONS[role] || [];
