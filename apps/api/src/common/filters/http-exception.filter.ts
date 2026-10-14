@@ -7,6 +7,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { redactSensitiveData, redactString } from '@shopcloud/contracts';
+import { getActiveCorrelationId } from '../logging/correlation-context';
 
 @Catch()
 export class GlobalHttpExceptionFilter implements ExceptionFilter {
@@ -15,6 +17,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const correlationId = getActiveCorrelationId();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let errorCode = 'INTERNAL_SERVER_ERROR';
@@ -43,16 +46,31 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      this.logger.error(`Unhandled Exception: ${exception.message}`, exception.stack);
-      message = exception.message;
+      const sanitizedMsg = redactString(exception.message);
+      const boundedStack = exception.stack
+        ? redactString(exception.stack.split('\n').slice(0, 5).join('\n'))
+        : undefined;
+      this.logger.error(`[${correlationId}] Unhandled Exception: ${sanitizedMsg}`, boundedStack);
+      message = sanitizedMsg;
+    }
+
+    const sanitizedMessage = redactString(message);
+    const sanitizedDetails = details ? redactSensitiveData(details) : undefined;
+
+    // Log 5xx errors at error level; 4xx errors at warning level
+    if (status >= 500) {
+      this.logger.error(`[${correlationId}] HTTP ${status} ${errorCode}: ${sanitizedMessage}`);
+    } else if (status >= 400 && status !== HttpStatus.NOT_FOUND) {
+      this.logger.warn(`[${correlationId}] HTTP ${status} ${errorCode}: ${sanitizedMessage}`);
     }
 
     response.status(status).json({
       success: false,
       error: {
         code: errorCode,
-        message,
-        ...(details ? { details } : {}),
+        message: sanitizedMessage,
+        correlationId,
+        ...(sanitizedDetails ? { details: sanitizedDetails } : {}),
       },
       timestamp: new Date().toISOString(),
     });
@@ -72,6 +90,8 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         return 'CONFLICT';
       case HttpStatus.UNPROCESSABLE_ENTITY:
         return 'UNPROCESSABLE_ENTITY';
+      case HttpStatus.TOO_MANY_REQUESTS:
+        return 'TOO_MANY_REQUESTS';
       default:
         return 'INTERNAL_SERVER_ERROR';
     }

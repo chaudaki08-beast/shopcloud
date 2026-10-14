@@ -9,6 +9,7 @@ import {
   NotificationRequestedPayload,
 } from '@shopcloud/contracts';
 import { WorkerEventPublisher } from './event-publisher';
+import { WorkerLogger } from './worker-logger';
 
 export class InventoryWorker {
   static readonly CONSUMER_NAME = 'inventory-worker';
@@ -23,8 +24,10 @@ export class InventoryWorker {
     const startTime = Date.now();
     const { payload, eventId, correlationId } = envelope;
 
-    console.log(
-      `[InventoryWorker] Processing OrderCreated [${payload.orderNumber}] (eventId: ${eventId}, correlationId: ${correlationId})`,
+    WorkerLogger.info(
+      `Processing OrderCreated [${payload.orderNumber}] (eventId: ${eventId}, correlationId: ${correlationId})`,
+      this.CONSUMER_NAME,
+      { orderNumber: payload.orderNumber, eventId, correlationId },
     );
 
     // 1. Durable Idempotency Check
@@ -38,114 +41,144 @@ export class InventoryWorker {
     });
 
     if (alreadyProcessed) {
-      console.log(
-        `[InventoryWorker] [IDEMPOTENT_SKIP] Event ${eventId} already processed by ${this.CONSUMER_NAME} at ${alreadyProcessed.processedAt.toISOString()}`,
-      );
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'DUPLICATE_IGNORED',
+        durationMs: Date.now() - startTime,
+      });
       return { status: 'DUPLICATE_IGNORED', eventId, reserved: true };
     }
 
-    // 2. Transactional Stock Verification & Reservation
-    const result = await prisma.$transaction(async (tx) => {
-      // Validate all products and stock availability
-      for (const item of payload.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-        });
+    try {
+      // 2. Transactional Stock Verification & Reservation
+      await prisma.$transaction(async (tx) => {
+        // Validate all products and stock availability
+        for (const item of payload.items) {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
 
-        if (!product || !product.isActive) {
-          throw new Error(
-            `Product [${item.productId}] is unavailable or inactive for order ${payload.orderNumber}`,
-          );
+          if (!product || !product.isActive) {
+            throw new Error(
+              `Product [${item.productId}] is unavailable or inactive for order ${payload.orderNumber}`,
+            );
+          }
+
+          // Enforce non-negative inventory constraint
+          if (product.stock < item.quantity) {
+            throw new Error(
+              `Insufficient stock for [${product.name}]. Requested ${item.quantity}, available ${product.stock}`,
+            );
+          }
+
+          // Decrement stock
+          const updated = await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+
+          // Audit inventory movement
+          await tx.inventoryMovement.create({
+            data: {
+              productId: item.productId,
+              changeQuantity: -item.quantity,
+              previousStock: product.stock,
+              newStock: updated.stock,
+              reason: 'ORDER_RESERVED',
+              referenceId: payload.orderId,
+            },
+          });
         }
 
-        // Enforce non-negative inventory constraint
-        if (product.stock < item.quantity) {
-          throw new Error(
-            `Insufficient stock for [${product.name}]. Requested ${item.quantity}, available ${product.stock}`,
-          );
-        }
-
-        // Decrement stock
-        const updated = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-
-        // Audit inventory movement
-        await tx.inventoryMovement.create({
+        // Record durable idempotency marker within the same ACID transaction
+        await tx.processedEvent.create({
           data: {
-            productId: item.productId,
-            changeQuantity: -item.quantity,
-            previousStock: product.stock,
-            newStock: updated.stock,
-            reason: 'ORDER_RESERVED',
-            referenceId: payload.orderId,
+            eventId,
+            consumer: this.CONSUMER_NAME,
+            eventType: envelope.eventType,
           },
         });
-      }
 
-      // Record durable idempotency marker within the same ACID transaction
-      await tx.processedEvent.create({
-        data: {
-          eventId,
-          consumer: this.CONSUMER_NAME,
-          eventType: envelope.eventType,
-        },
+        return { success: true };
       });
 
-      return { success: true };
-    });
-
-    const durationMs = Date.now() - startTime;
-    console.log(
-      `[InventoryWorker] Reserved inventory for Order [${payload.orderNumber}] in ${durationMs}ms`,
-    );
-
-    // 3. Emit downstream events: inventory.reserved.v1 and notification.requested.v1
-    const reservedEvent: EventEnvelope<InventoryReservedPayload> = {
-      eventId: `evt-inv-res-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      eventType: EVENT_TYPES.INVENTORY_RESERVED_V1,
-      eventVersion: 'v1',
-      occurredAt: new Date().toISOString(),
-      producer: 'shopcloud-inventory-worker',
-      correlationId,
-      causationId: eventId,
-      aggregateType: 'Inventory',
-      aggregateId: payload.orderId,
-      payload: {
-        orderId: payload.orderId,
-        items: payload.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-        reservedAt: new Date().toISOString(),
-        status: 'RESERVED',
-      },
-    };
-    await WorkerEventPublisher.publish(reservedEvent);
-
-    const notificationEvent: EventEnvelope<NotificationRequestedPayload> = {
-      eventId: `evt-notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      eventType: EVENT_TYPES.NOTIFICATION_REQUESTED_V1,
-      eventVersion: 'v1',
-      occurredAt: new Date().toISOString(),
-      producer: 'shopcloud-inventory-worker',
-      correlationId,
-      causationId: eventId,
-      aggregateType: 'Notification',
-      aggregateId: payload.orderId,
-      payload: {
-        recipientEmail: payload.userEmail,
-        recipientName: 'Valued Customer',
-        template: 'ORDER_CONFIRMATION',
-        variables: {
-          orderNumber: payload.orderNumber,
-          totalAmount: payload.totalAmount / 100,
-        },
-        orderId: payload.orderId,
+      const durationMs = Date.now() - startTime;
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
         correlationId,
-      },
-    };
-    await WorkerEventPublisher.publish(notificationEvent);
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'SUCCESS',
+        durationMs,
+      });
 
-    return { status: 'SUCCESS', eventId, reserved: true };
+      // 3. Emit downstream events: inventory.reserved.v1 and notification.requested.v1
+      const reservedEvent: EventEnvelope<InventoryReservedPayload> = {
+        eventId: `evt-inv-res-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        eventType: EVENT_TYPES.INVENTORY_RESERVED_V1,
+        eventVersion: 'v1',
+        occurredAt: new Date().toISOString(),
+        producer: 'shopcloud-inventory-worker',
+        correlationId,
+        causationId: eventId,
+        aggregateType: 'Inventory',
+        aggregateId: payload.orderId,
+        payload: {
+          orderId: payload.orderId,
+          items: payload.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          reservedAt: new Date().toISOString(),
+          status: 'RESERVED',
+        },
+      };
+      await WorkerEventPublisher.publish(reservedEvent);
+
+      const notificationEvent: EventEnvelope<NotificationRequestedPayload> = {
+        eventId: `evt-notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        eventType: EVENT_TYPES.NOTIFICATION_REQUESTED_V1,
+        eventVersion: 'v1',
+        occurredAt: new Date().toISOString(),
+        producer: 'shopcloud-inventory-worker',
+        correlationId,
+        causationId: eventId,
+        aggregateType: 'Notification',
+        aggregateId: payload.orderId,
+        payload: {
+          recipientEmail: payload.userEmail,
+          recipientName: 'Valued Customer',
+          template: 'ORDER_CONFIRMATION',
+          variables: {
+            orderNumber: payload.orderNumber,
+            totalAmount: payload.totalAmount / 100,
+          },
+          orderId: payload.orderId,
+          correlationId,
+        },
+      };
+      await WorkerEventPublisher.publish(notificationEvent);
+
+      return { status: 'SUCCESS', eventId, reserved: true };
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'FAILED',
+        durationMs,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
   }
 
   /**
@@ -154,10 +187,13 @@ export class InventoryWorker {
   static async handleInventoryReleased(
     envelope: EventEnvelope<InventoryReleasedPayload>,
   ): Promise<{ status: string; eventId: string }> {
+    const startTime = Date.now();
     const { payload, eventId, correlationId } = envelope;
 
-    console.log(
-      `[InventoryWorker] Processing InventoryReleased for order [${payload.orderId}] (eventId: ${eventId})`,
+    WorkerLogger.info(
+      `Processing InventoryReleased for order [${payload.orderId}] (eventId: ${eventId})`,
+      this.CONSUMER_NAME,
+      { orderId: payload.orderId, eventId, correlationId },
     );
 
     const alreadyProcessed = await prisma.processedEvent.findUnique({
@@ -170,49 +206,78 @@ export class InventoryWorker {
     });
 
     if (alreadyProcessed) {
-      console.log(
-        `[InventoryWorker] [IDEMPOTENT_SKIP] Release event ${eventId} already processed.`,
-      );
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'DUPLICATE_IGNORED',
+        durationMs: Date.now() - startTime,
+      });
       return { status: 'DUPLICATE_IGNORED', eventId };
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const item of payload.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-        });
-
-        if (product) {
-          const updated = await tx.product.update({
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const item of payload.items) {
+          const product = await tx.product.findUnique({
             where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
           });
 
-          await tx.inventoryMovement.create({
-            data: {
-              productId: item.productId,
-              changeQuantity: item.quantity,
-              previousStock: product.stock,
-              newStock: updated.stock,
-              reason: 'ORDER_RELEASED',
-              referenceId: payload.orderId,
-            },
-          });
+          if (product) {
+            const updated = await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+            });
+
+            await tx.inventoryMovement.create({
+              data: {
+                productId: item.productId,
+                changeQuantity: item.quantity,
+                previousStock: product.stock,
+                newStock: updated.stock,
+                reason: 'ORDER_RELEASED',
+                referenceId: payload.orderId,
+              },
+            });
+          }
         }
-      }
 
-      await tx.processedEvent.create({
-        data: {
-          eventId,
-          consumer: this.CONSUMER_NAME,
-          eventType: envelope.eventType,
-        },
+        await tx.processedEvent.create({
+          data: {
+            eventId,
+            consumer: this.CONSUMER_NAME,
+            eventType: envelope.eventType,
+          },
+        });
       });
-    });
 
-    console.log(
-      `[InventoryWorker] Released inventory for order [${payload.orderId}] (correlationId: ${correlationId})`,
-    );
-    return { status: 'SUCCESS', eventId };
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'SUCCESS',
+        durationMs: Date.now() - startTime,
+      });
+      return { status: 'SUCCESS', eventId };
+    } catch (err) {
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'FAILED',
+        durationMs: Date.now() - startTime,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
   }
 }

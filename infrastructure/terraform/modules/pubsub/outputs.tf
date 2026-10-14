@@ -22,3 +22,13 @@ output "notification_dlq_topic" {
   description = "Name of the notification dead-letter topic"
   value       = google_pubsub_topic.notification_dlq.name
 }
+
+output "inventory_dlq_sub" {
+  description = "Name of the operator inventory DLQ subscription"
+  value       = google_pubsub_subscription.inventory_dlq_sub.name
+}
+
+output "notification_dlq_sub" {
+  description = "Name of the operator notification DLQ subscription"
+  value       = google_pubsub_subscription.notification_dlq_sub.name
+}

@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0-phase14] — Phase 14: Monitoring, Observability, Alerting & SLOs (2026-10-14)
+
+### Added
+* Google Cloud Logging Structured JSON Format & Privacy Redaction (`@shopcloud/contracts`, `apps/api`, `apps/workers`):
+  - Standardized JSON logging pipeline matching Google Cloud Logging syslog severity levels (`DEBUG`, `INFO`, `NOTICE`, `WARNING`, `ERROR`, `CRITICAL`).
+  - Implemented automated deep redaction engine (`redactSensitiveData`, `redactString`, `isSensitiveKey`):
+    * Key-based redaction for passwords, JWT tokens, API keys, secrets, authorization headers, cookies, and payment attributes (card numbers, CVV, PAN).
+    * Regex masking for embedded database connection passwords (`postgresql://user:[REDACTED]@...`), Bearer tokens, raw JWT signatures, and credit card PANs (`****-****-****-1234`).
+  - Truncated and bounded exception stack traces (maximum 5 frames, sanitized) to prevent log bloat and duplicate error emissions.
+  - Implemented `StructuredLoggerService` for NestJS API Gateway with automatic local development vs production JSON formatting.
+  - Implemented `WorkerLogger` for Async Workers daemon with structured lifecycle event emission (`outcome: SUCCESS | DUPLICATE_IGNORED | FAILED`, `durationMs`, `retryCount`).
+* Correlation ID & Distributed Trace Propagation:
+  - Built Express `CorrelationMiddleware` using Node.js `AsyncLocalStorage` (`node:async_hooks`).
+  - Captured and propagated `x-correlation-id` and `x-request-id` headers, echoing `x-correlation-id` in HTTP response headers and error envelopes.
+  - Parsed Google Cloud Trace context (`X-Cloud-Trace-Context`) and W3C `traceparent` headers, automatically setting `logging.googleapis.com/trace` and `logging.googleapis.com/spanId` for log-to-trace navigation in GCP.
+  - Propagated correlation IDs from API through outbox events and Pub/Sub message attributes into background worker execution.
+* HTTP Access Logging & Health Probe Log Noise Suppression:
+  - Built `HttpLoggingInterceptor` capturing request method, sanitized URL, response status code, latency, and client IP.
+  - Categorized high-frequency container health probes (`/health`, `/health/liveness`) to `DEBUG` severity, preventing log ingestion charges in production while preserving detailed logging for business traffic.
+* Terraform-Managed Observability Infrastructure (`infrastructure/terraform/modules/monitoring`):
+  - Provisioned Cloud Monitoring Operational Dashboard `ShopCloud Operations Dashboard (dev)`:
+    * Cloud Run request rate by service and HTTP status code class.
+    * Cloud Run 95th percentile request latency.
+    * Cloud Run 5xx server error rate.
+    * Container CPU & memory utilization percentiles.
+    * Active container instances tracking scale-to-zero behavior.
+    * Pub/Sub worker subscription undelivered message backlog.
+    * Pub/Sub oldest unacknowledged message age.
+    * Dead-Letter Queue (DLQ) backlog activity.
+  - Provisioned 4 symptom-based Cloud Monitoring Alert Policies:
+    * `ShopCloud - Sustained 5xx Server Errors (dev)`: Triggers on 5xx error rate > 1 req/sec for 5 minutes.
+    * `ShopCloud - High Request Latency P95 (dev)`: Triggers on P95 latency > 1500ms for 5 minutes.
+    * `ShopCloud - PubSub Worker Backlog Accumulation (dev)`: Triggers on undelivered messages > 100 for 10 minutes.
+    * `ShopCloud - Dead Letter Queue Activity (dev)`: Triggers on DLQ messages > 0 for 5 minutes.
+* Service Level Objectives (SLOs) & Incident Playbooks:
+  - Formulated formal mathematical SLIs and SLOs for API Availability (99.5%), API Latency (P95 <= 500ms), Event Processing Reliability (99.9%), and Payment Webhook Processing Reliability (99.9%).
+  - Comprehensive operational incident runbooks in `docs/observability/incident-runbooks.md` covering 5xx investigations, latency diagnosis, backlog triage, DLQ recovery, payment webhook debugging, and intentional cost-saving shutdown verification.
+* Zero-Cost Policy Compliance ($0 / ₹0 avoidable GCP spend):
+  - Relied strictly on free native GCP platform metrics, zero custom metric fees.
+  - Pinned Cloud SQL activation policy to `NEVER` (verified `STOPPED`).
+  - Kept notification channels list empty (`[]`) by default to prevent external SMS or integration costs.
+
+---
+
 ## [1.3.0-phase13] — Phase 13: Terraform Infrastructure as Code (IaC) (2026-10-14)
 
 ### Added
