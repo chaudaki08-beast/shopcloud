@@ -1,42 +1,62 @@
-variable "project_name" {
-  type    = string
-  default = "shopcloud"
+variable "project_id" {
+  description = "The Google Cloud Project ID"
+  type        = string
 }
 
-variable "environment" {
-  type = string
+variable "instance_name" {
+  description = "Name of the Cloud SQL instance"
+  type        = string
+  default     = "shopcloud-postgres"
 }
 
 variable "region" {
-  type    = string
-  default = "asia-south1"
+  description = "GCP Region for Cloud SQL"
+  type        = string
+  default     = "asia-south1"
+}
+
+variable "zone" {
+  description = "GCP Zone for Cloud SQL instance location preference"
+  type        = string
+  default     = "asia-south1-c"
+}
+
+variable "database_version" {
+  description = "PostgreSQL engine version"
+  type        = string
+  default     = "POSTGRES_16"
 }
 
 variable "tier" {
-  type    = string
-  default = "db-f1-micro"
+  description = "Machine tier for the database instance"
+  type        = string
+  default     = "db-custom-1-3840"
 }
 
-variable "network_id" {
-  type = string
+variable "activation_policy" {
+  description = "Instance activation policy. Default is NEVER to preserve stopped state for cost control."
+  type        = string
+  default     = "NEVER"
 }
 
-variable "vpc_connection_dependency" {
-  type    = any
-  default = null
+variable "deletion_protection" {
+  description = "Guards against accidental deletion"
+  type        = bool
+  default     = true
 }
 
 variable "database_name" {
-  type    = string
-  default = "shopcloud"
+  description = "Name of the logical PostgreSQL database"
+  type        = string
+  default     = "shopcloud"
 }
 
-variable "db_user" {
-  type    = string
-  default = "shopcloud_app"
+variable "api_sa_email" {
+  description = "Email of the API runtime service account for cloudsql.client grant"
+  type        = string
 }
 
-variable "db_password" {
-  type      = string
-  sensitive = true
+variable "worker_sa_email" {
+  description = "Email of the Worker runtime service account for cloudsql.client grant"
+  type        = string
 }

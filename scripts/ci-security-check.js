@@ -28,6 +28,9 @@ try {
     /service[-_]?account.*\.json$/i,
     /credentials\.json$/i,
     /gha-creds.*\.json$/i,
+    /\.tfstate(?:\.backup)?$/i,
+    /\.tfplan$/i,
+    /\.tfvars$/i,
   ];
 
   const flaggedFiles = trackedFiles.filter(file => {

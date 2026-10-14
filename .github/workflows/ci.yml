@@ -165,3 +165,28 @@ jobs:
       - name: Validate Local Compose Configuration
         if: matrix.service == 'api'
         run: docker compose -f compose.yaml config --quiet
+
+  terraform:
+    name: Terraform Quality & Security Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+
+      - name: Check Formatting
+        run: terraform fmt -check -recursive infrastructure/terraform
+
+      - name: Initialize Dev Environment (Backend Disabled)
+        working-directory: infrastructure/terraform/environments/dev
+        run: terraform init -backend=false
+
+      - name: Validate Dev Environment
+        working-directory: infrastructure/terraform/environments/dev
+        run: terraform validate
+
