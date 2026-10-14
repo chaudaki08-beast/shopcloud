@@ -1,4 +1,10 @@
-import { Injectable, Module, OnApplicationShutdown } from '@nestjs/common';
+import {
+  Injectable,
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { prisma } from '@shopcloud/database';
 import { EventsModule } from './modules/events/events.module';
 import { HealthModule } from './modules/health/health.module';
@@ -9,6 +15,8 @@ import { CartModule } from './modules/cart/cart.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { LoggingModule } from './common/logging/logging.module';
+import { CorrelationMiddleware } from './common/logging/correlation.middleware';
 
 /** Releases the shared Prisma connection pool when Cloud Run sends SIGTERM (enableShutdownHooks in main.ts). */
 @Injectable()
@@ -20,6 +28,7 @@ export class PrismaShutdownHook implements OnApplicationShutdown {
 
 @Module({
   imports: [
+    LoggingModule,
     EventsModule,
     HealthModule,
     AuthModule,
@@ -32,4 +41,8 @@ export class PrismaShutdownHook implements OnApplicationShutdown {
   ],
   providers: [PrismaShutdownHook],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationMiddleware).forRoutes('*');
+  }
+}

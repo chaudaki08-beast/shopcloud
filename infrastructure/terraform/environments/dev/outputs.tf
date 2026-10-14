@@ -67,3 +67,14 @@ output "wif_pool_id" {
   description = "Workload Identity Pool ID"
   value       = module.iam.wif_pool_id
 }
+
+output "monitoring_dashboard_id" {
+  description = "Cloud Monitoring Operational Dashboard ID"
+  value       = module.monitoring.dashboard_id
+}
+
+output "monitoring_alert_policy_ids" {
+  description = "Cloud Monitoring Alert Policy IDs"
+  value       = module.monitoring.alert_policy_ids
+}
+

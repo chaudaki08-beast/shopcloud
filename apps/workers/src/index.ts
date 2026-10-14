@@ -4,6 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '@shopcloud/database';
 import { CloudEventEnvelope } from '@shopcloud/contracts';
 import { handleEvent } from './event-router';
+import { WorkerLogger } from './worker-logger';
 import {
   decodePushEnvelope,
   PushAuthConfig,
@@ -56,6 +57,7 @@ async function handlePush(
   auth: PushAuthConfig | null,
 ): Promise<void> {
   if (auth && !(await verifyPushToken(req, auth))) {
+    WorkerLogger.warn('Unauthorized push delivery attempt rejected', 'WorkerPush');
     res.writeHead(401);
     res.end();
     return;
@@ -67,7 +69,7 @@ async function handlePush(
   } catch (err) {
     // Pub/Sub redelivers on ANY non-2xx (4xx included); a payload that cannot be parsed never will be,
     // so log it and acknowledge instead of looping until the dead-letter limit.
-    console.error('[Worker] Dropping malformed push message:', (err as Error).message);
+    WorkerLogger.warn(`Dropping malformed push message: ${(err as Error).message}`, 'WorkerPush');
     res.writeHead(204);
     res.end();
     return;
@@ -75,13 +77,13 @@ async function handlePush(
 
   const { messageId } = decoded;
   try {
-    console.log(`[Worker] Received push message ID: ${messageId}`);
+    WorkerLogger.info(`Received push message ID: ${messageId}`, 'WorkerPush', { messageId });
     await handleEvent(decoded.event);
     // 2xx acknowledges the message
     res.writeHead(204);
     res.end();
   } catch (err) {
-    console.error(`[Worker] Error processing push message ${messageId}:`, err);
+    WorkerLogger.error(`Error processing push message ${messageId}`, err, 'WorkerPush', { messageId });
     // Non-2xx makes Pub/Sub redeliver with backoff (and dead-letter after max attempts)
     res.writeHead(500);
     res.end();
@@ -89,7 +91,7 @@ async function handlePush(
 }
 
 async function bootstrapWorkers() {
-  console.log('⚡ Starting ShopCloud Event Workers Daemon...');
+  WorkerLogger.info('Starting ShopCloud Event Workers Daemon...', 'WorkerBootstrap');
 
   const deliveryMode = resolveDeliveryMode();
   const pushAuth = deliveryMode === 'push' ? resolvePushAuth() : null;
@@ -118,7 +120,10 @@ async function bootstrapWorkers() {
   });
 
   httpServer.listen(httpPort, '0.0.0.0', () => {
-    console.log(`[Worker] HTTP server (health${deliveryMode === 'push' ? ' + /pubsub/push' : ''}) on 0.0.0.0:${httpPort}`);
+    WorkerLogger.info(
+      `HTTP server (health${deliveryMode === 'push' ? ' + /pubsub/push' : ''}) listening on 0.0.0.0:${httpPort}`,
+      'WorkerBootstrap',
+    );
   });
 
   let subscription: Subscription | null = null;
@@ -137,23 +142,26 @@ async function bootstrapWorkers() {
       subscription = pubsub.subscription(subscriptionName);
 
       subscription.on('message', async (message) => {
-        console.log(`[Worker] Received message ID: ${message.id}`);
+        WorkerLogger.info(`Received pull message ID: ${message.id}`, 'WorkerPull', { messageId: message.id });
         try {
           const payload: CloudEventEnvelope<any> = JSON.parse(message.data.toString());
           await handleEvent(payload);
           message.ack();
         } catch (err) {
-          console.error(`[Worker] Error processing message ${message.id}:`, err);
+          WorkerLogger.error(`Error processing message ${message.id}`, err, 'WorkerPull', { messageId: message.id });
           message.nack();
         }
       });
 
-      console.log(`[Worker] Listening for events on subscription: ${subscriptionName}`);
+      WorkerLogger.info(`Listening for events on subscription: ${subscriptionName}`, 'WorkerBootstrap');
     } catch (err) {
-      console.warn(`[Worker] Notice: Pub/Sub listener offline (${(err as Error).message}). Local dev mode active.`);
+      WorkerLogger.warn(`Notice: Pub/Sub listener offline (${(err as Error).message}). Local dev mode active.`, 'WorkerBootstrap');
     }
   } else {
-    console.log(`[Worker] Push delivery active (OIDC verification ${pushAuth ? 'enabled' : 'DISABLED — local only'})`);
+    WorkerLogger.info(
+      `Push delivery active (OIDC verification ${pushAuth ? 'enabled' : 'DISABLED — local only'})`,
+      'WorkerBootstrap',
+    );
   }
 
   // Graceful shutdown: stop intake, release Pub/Sub and database connections, exit before SIGKILL
@@ -161,10 +169,10 @@ async function bootstrapWorkers() {
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`Received ${signal}, shutting down workers gracefully...`);
+    WorkerLogger.info(`Received ${signal}, shutting down workers gracefully...`, 'WorkerShutdown');
 
     const forceExit = setTimeout(() => {
-      console.error('Graceful shutdown timed out; exiting');
+      WorkerLogger.error('Graceful shutdown timed out; exiting', undefined, 'WorkerShutdown');
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS);
     forceExit.unref();
@@ -175,7 +183,7 @@ async function bootstrapWorkers() {
       await prisma.$disconnect();
       process.exit(0);
     } catch (err) {
-      console.error('Error during shutdown:', err);
+      WorkerLogger.error('Error during shutdown', err, 'WorkerShutdown');
       process.exit(1);
     }
   };

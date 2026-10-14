@@ -72,3 +72,19 @@ module "cloud_run" {
   deployer_sa_email        = module.iam.github_deployer_email
   labels                   = local.common_labels
 }
+
+# 8. Observability & SRE Layer (Cloud Monitoring & Alerting)
+module "monitoring" {
+  source                           = "../../modules/monitoring"
+  project_id                       = var.project_id
+  environment                      = var.environment
+  api_service_name                 = module.cloud_run.api_service_name
+  web_service_name                 = module.cloud_run.web_service_name
+  inventory_subscription_id        = module.pubsub.inventory_sub
+  notification_subscription_id     = module.pubsub.notification_sub
+  inventory_dlq_subscription_id    = module.pubsub.inventory_dlq_sub
+  notification_dlq_subscription_id = module.pubsub.notification_dlq_sub
+  cloud_sql_instance_name          = module.cloud_sql.instance_name
+  notification_channels            = var.monitoring_notification_channels
+}
+

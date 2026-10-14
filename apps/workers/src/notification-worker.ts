@@ -1,5 +1,6 @@
 import { prisma } from '@shopcloud/database';
 import { EventEnvelope, NotificationRequestedPayload } from '@shopcloud/contracts';
+import { WorkerLogger } from './worker-logger';
 
 export class NotificationWorker {
   static readonly CONSUMER_NAME = 'notification-worker';
@@ -10,8 +11,10 @@ export class NotificationWorker {
     const startTime = Date.now();
     const { payload, eventId, correlationId } = envelope;
 
-    console.log(
-      `[NotificationWorker] Handling ${payload.template} for ${payload.recipientEmail} (eventId: ${eventId}, correlationId: ${correlationId})`,
+    WorkerLogger.info(
+      `Handling notification template [${payload.template}] (eventId: ${eventId}, correlationId: ${correlationId})`,
+      this.CONSUMER_NAME,
+      { template: payload.template, eventId, correlationId },
     );
 
     // 1. Durable Idempotency Check
@@ -25,42 +28,72 @@ export class NotificationWorker {
     });
 
     if (alreadyProcessed) {
-      console.log(
-        `[NotificationWorker] [IDEMPOTENT_SKIP] Event ${eventId} already processed by ${this.CONSUMER_NAME}.`,
-      );
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'DUPLICATE_IGNORED',
+        durationMs: Date.now() - startTime,
+      });
       return { status: 'DUPLICATE_IGNORED', eventId };
     }
 
-    // 2. Transactional Notification Persistence & Idempotency Marker
-    const record = await prisma.$transaction(async (tx) => {
-      const notification = await tx.notification.create({
-        data: {
-          recipientEmail: payload.recipientEmail,
-          recipientName: payload.recipientName,
-          template: payload.template,
-          status: 'PROCESSED',
-          variables: payload.variables as any,
-          orderId: payload.orderId,
-          correlationId: correlationId || payload.correlationId,
-        },
+    try {
+      // 2. Transactional Notification Persistence & Idempotency Marker
+      const record = await prisma.$transaction(async (tx) => {
+        const notification = await tx.notification.create({
+          data: {
+            recipientEmail: payload.recipientEmail,
+            recipientName: payload.recipientName,
+            template: payload.template,
+            status: 'PROCESSED',
+            variables: payload.variables as any,
+            orderId: payload.orderId,
+            correlationId: correlationId || payload.correlationId,
+          },
+        });
+
+        await tx.processedEvent.create({
+          data: {
+            eventId,
+            consumer: this.CONSUMER_NAME,
+            eventType: envelope.eventType,
+          },
+        });
+
+        return notification;
       });
 
-      await tx.processedEvent.create({
-        data: {
-          eventId,
-          consumer: this.CONSUMER_NAME,
-          eventType: envelope.eventType,
-        },
+      const durationMs = Date.now() - startTime;
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'SUCCESS',
+        durationMs,
       });
 
-      return notification;
-    });
-
-    const durationMs = Date.now() - startTime;
-    console.log(
-      `[NotificationWorker] Dispatched notification ID [${record.id}] in ${durationMs}ms`,
-    );
-
-    return { status: 'SUCCESS', eventId, notificationId: record.id };
+      return { status: 'SUCCESS', eventId, notificationId: record.id };
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      WorkerLogger.logEvent({
+        consumerName: this.CONSUMER_NAME,
+        eventType: envelope.eventType,
+        eventId,
+        correlationId,
+        aggregateType: envelope.aggregateType,
+        aggregateId: payload.orderId,
+        outcome: 'FAILED',
+        durationMs,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
   }
 }

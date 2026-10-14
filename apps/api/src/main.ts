@@ -9,9 +9,15 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { buildCorsOptions } from './common/cors';
 
+import { StructuredLoggerService } from './common/logging/structured-logger.service';
+
 async function bootstrap() {
-  const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    bufferLogs: true,
+  });
+  const logger = app.get(StructuredLoggerService);
+  app.useLogger(logger);
 
   // Enable graceful shutdown for Cloud Run SIGTERM/SIGINT signals
   app.enableShutdownHooks();
