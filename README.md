@@ -84,8 +84,8 @@ flowchart TD
 | **Phase 12** | CI/CD with Workload Identity Federation ([docs](docs/ci-cd/architecture.md)) | ✅ **COMPLETE** | `v1.2.0-phase12` |
 | **Phase 13** | Terraform Infrastructure as Code ([docs](docs/terraform/architecture.md)) | ✅ **COMPLETE** | `v1.3.0-phase13` |
 | **Phase 14** | Cloud Monitoring & Alerting ([docs](docs/observability/architecture.md)) | ✅ **COMPLETE** | `v1.4.0-phase14` |
-| **Phase 15** | Load Testing (k6) | 🟡 **UP NEXT** | `v1.5.0-phase15` |
-| **Phase 16** | Reliability & Disaster Recovery | ⚪ NOT STARTED | `v1.6.0-phase16` |
+| **Phase 15** | Load Testing & Capacity Baselines ([docs](docs/performance/test-strategy.md)) | ✅ **COMPLETE** | `v1.5.0-phase15` |
+| **Phase 16** | Reliability & Disaster Recovery | 🟡 **UP NEXT** | `v1.6.0-phase16` |
 | **Phase 17** | GKE Workload Migration | ⚪ NOT STARTED | `v1.7.0-phase17` |
 | **Phase 18** | Final Cloud Architecture Audit | ⚪ NOT STARTED | `v2.0.0` |
 
@@ -104,7 +104,7 @@ flowchart TD
 | **Infrastructure as Code** | **Terraform** modular configuration (VPC, IAM, Cloud SQL, Cloud Run, Pub/Sub, Alerts) |
 | **DevOps & CI/CD** | **GitHub Actions** with **Workload Identity Federation** (zero long-lived service account keys) |
 | **Observability** | **Google Cloud Monitoring & Logging**, custom SLO dashboard, 5xx rate alerts, P95 latency alerts |
-| **Performance Testing** | **k6** load testing scripts simulating up to 1,000 concurrent virtual users |
+| **Performance Testing** | **Grafana k6** reproducible load testing suite with SLO-calibrated thresholds |
 
 ---
 
@@ -143,8 +143,16 @@ shopcloud/
 │   ├── terraform/              # Complete Terraform IaC modules for GCP
 │   │   ├── environments/dev/   # Dev environment composition
 │   │   └── modules/            # IAM, Artifact Registry, Secret Manager, Storage, Pub/Sub, Cloud SQL, Cloud Run, Monitoring
-│   ├── docker/                 # Docker Compose for local PostgreSQL 16 & Pub/Sub emulator
-│   └── k6/                     # Load testing script with latency percentiles
+│   └── docker/                 # Docker Compose for local PostgreSQL 16 & Pub/Sub emulator
+├── tests/
+│   └── load/                   # Grafana k6 reproducible load test suite
+│       ├── config/             # Environment, profile selection & safety validation
+│       ├── lib/                # SLO thresholds, test data generators, auth helper
+│       └── scenarios/          # Health, Catalog, Cart, Checkout, Lifecycle, Webhook events
+├── docs/
+│   ├── performance/            # Test strategy, empirical baselines, bottleneck analysis
+│   ├── observability/          # Monitoring dashboards, alert policies, incident runbooks
+│   └── terraform/              # IaC architecture, import guides, operational runbooks
 └── .github/
     └── workflows/              # GitHub Actions CI & Workload Identity Federation CD pipelines
 ```
@@ -185,18 +193,39 @@ npm test -w @shopcloud/database
 
 ---
 
-## 📊 Load Testing Benchmark (k6)
+## 📊 Performance & Load Testing Suite (k6)
 
-Run load simulation:
+ShopCloud features an automated, reproducible performance testing suite built with [Grafana k6](https://k6.io/) and strictly calibrated against Phase 14 SLOs:
+
+* **Test Strategy & Safety**: [docs/performance/test-strategy.md](docs/performance/test-strategy.md)
+* **Empirical Baselines**: [docs/performance/baseline.md](docs/performance/baseline.md)
+* **Bottleneck Analysis**: [docs/performance/bottlenecks-and-recommendations.md](docs/performance/bottlenecks-and-recommendations.md)
+
+### Running Performance Tests Locally
+
 ```bash
-k6 run -e API_BASE_URL=http://localhost:3000/api/v1 infrastructure/k6/load-test.js
+# Validate k6 script syntax, exports, and correlation headers (CI gate)
+npm run test:load:validate
+
+# Smoke test full user journey (1 VU, 3 iterations)
+npm run test:load:smoke
+
+# Stage B: High-throughput catalog browsing & search (10-30 VUs)
+npm run test:load:catalog
+
+# Stage D: High-frequency signed payment webhook processing & idempotency
+npm run test:load:events
+
+# Composite test suite
+npm run test:load:suite
 ```
 
-Benchmark targets:
-* **Virtual Users (VU)**: 1,000 concurrent users
-* **P95 Latency**: < 450 ms
-* **P99 Latency**: < 850 ms
-* **HTTP Failure Rate**: < 0.1%
+### Calibrated SLO Latency Targets
+* **Public Liveness Probes**: P95 < 20 ms, P99 < 50 ms (Observed P95: 4.76 ms)
+* **Read-Heavy Catalog**: P95 < 100 ms, P99 < 250 ms (Observed P95: 7.51 ms)
+* **Event & Webhook Processing**: P95 < 150 ms, P99 < 350 ms (Observed P95: 5.96 ms)
+* **Authenticated Checkout**: P95 < 500 ms (Observed P95: 34.49 ms)
+* **Zero-Cost GCP Guard**: Built-in runtime guard blocks high-concurrency/stress tests against live GCP Cloud Run domains.
 
 ---
 

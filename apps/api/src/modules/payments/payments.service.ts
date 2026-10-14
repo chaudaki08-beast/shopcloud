@@ -32,13 +32,7 @@ import { RazorpayPaymentAdapter } from './providers/razorpay.adapter';
 import { StripePaymentAdapter } from './providers/stripe.adapter';
 import { OrderStateMachine } from '../orders/order-state-machine';
 
-// Runtime environment detection helper
-async function useDatabase(): Promise<boolean> {
-  if (process.env.NODE_ENV === 'test' && !process.env.DATABASE_URL) {
-    return false;
-  }
-  return true;
-}
+import { useDatabase } from '../../db-status';
 
 @Injectable()
 export class PaymentsService {

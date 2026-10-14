@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0-phase15] — Phase 15: Load Testing, Performance Baselines & Capacity Analysis (2026-10-15)
+
+### Added
+* Grafana k6 Reproducible Load Testing Suite (`tests/load/`):
+  - Centralized test harness and modular scenario architecture:
+    * `k6.config.js`: Profiles (`smoke`, `baseline`, `moderate`, `stress`), target environment resolution, safety validation guard against remote Cloud Run / live domains.
+    * `lib/thresholds.js`: SLO-calibrated thresholds matching Phase 14 targets (`{scenario:default}` isolated from auth setup).
+    * `lib/data.js`: Catalog test data, valid `CreateOrderDto` shipping address generator, correlation ID generator, and HMAC-SHA256 signature generator.
+    * `lib/auth.js`: Automated JWT token acquisition with rate-limit friendly setup lifecycle.
+    * `scenarios/health.js`: Stage A container liveness and health probes (100% checks passed, P95: 4.76 ms).
+    * `scenarios/catalog.js`: Stage B categories, paginated search, category filtering, and product detail lookup (100% checks passed, P95: 7.51 ms).
+    * `scenarios/cart.js`: Stage C authenticated cart mutations (add item, view cart, clear cart) (100% checks passed, P95: 8.52 ms).
+    * `scenarios/checkout.js`: Stage C checkout order placement with DTO validation and offline DB handling (100% checks passed, P95: 34.49 ms).
+    * `scenarios/order-lifecycle.js`: Stage C & D state machine lifecycle (place, fetch, cancel, duplicate cancel idempotency) (100% checks passed, P95: 7.55 ms).
+    * `scenarios/event-processing.js`: Stage D signed payment webhook processing, duplicate delivery idempotency, and forged signature security rejection (100% checks passed, P95: 5.96 ms).
+    * `index.js`: Composite orchestrator for full-platform validation (100% checks passed).
+    * `validate-scripts.js`: Fast static syntax, module exports, and correlation header validator for CI.
+* Application Performance Optimizations:
+  - `apps/api/src/modules/auth/permissions.service.ts`: Guarded `prisma.rolePermission.findMany` with `useDatabase()` check, eliminating a 2,000ms TCP connection timeout on offline DB mode and reducing authenticated latency to 5.2 ms.
+  - `apps/api/src/modules/payments/payments.service.ts`: Connected `useDatabase()` from shared `db-status` module, enabling in-memory fallback stores during database shutdown.
+* CI/CD Quality Automation:
+  - Added npm scripts: `test:load:validate`, `test:load:smoke`, `test:load:catalog`, `test:load:events`, `test:load:suite`.
+  - Added CI workflow step `Validate k6 Load Testing Suite Structure & Scripts` in `.github/workflows/ci.yml`.
+* Comprehensive Performance Documentation Suite (`docs/performance/`):
+  - `tests/load/README.md`: Suite usage, installation, environment variables, load profiles, and scenario reference.
+  - `test-strategy.md`: Architecture, user journeys, zero-cost GCP rules, SLO alignment, and CI gates.
+  - `baseline.md`: Empirical benchmark measurements, latency percentiles, throughput, check outcomes, and SLO comparisons.
+  - `bottlenecks-and-recommendations.md`: Diagnostic findings, connection pool sizing, caching, and low-cost recommendations.
+* Zero-Cost GCP Policy Compliance ($0 / ₹0 avoidable spend):
+  - Verified Cloud SQL instance `shopcloud-postgres` kept in stopped state (`NEVER`).
+  - Strict guard in `k6.config.js` preventing accidental high-concurrency or stress runs against live Cloud Run endpoints.
+  - Benchmarks conducted locally without billable cloud infrastructure.
+
+---
+
 ## [1.4.0-phase14] — Phase 14: Monitoring, Observability, Alerting & SLOs (2026-10-14)
 
 ### Added
