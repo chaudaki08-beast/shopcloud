@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
     "test": "node --require ts-node/register --test test/*.test.ts",

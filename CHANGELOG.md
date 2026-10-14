@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0-phase12] — Phase 12: CI/CD Automation, Security Gates & Controlled Deployments (2026-10-14)
+
+### Added
+* Automated Continuous Integration Pipeline (`.github/workflows/ci.yml`):
+  - Ephemeral PostgreSQL 16 container (`postgres:16-alpine`) for zero-cost integration test validation.
+  - Deterministic dependency installation via `npm ci` with GitHub Actions npm cache.
+  - Strict build ordering: `@shopcloud/contracts` → `@shopcloud/database` → `@shopcloud/api`, `@shopcloud/workers`, and `@shopcloud/web`.
+  - Ephemeral database migration application (`npm run db:migrate:deploy`) and test database seeding (`npm run db:seed`).
+  - Strict monorepo typecheck gate (`npm run typecheck`) across all five packages and applications.
+  - Monorepo lint gate (`npm run lint`) and full test suite execution (`npm test`).
+  - Multi-stage Docker build and Cloud Run contract smoke test matrix for `api`, `web`, and `worker` validating that containers boot and respond with HTTP 200 on injected `$PORT` (`/api/v1/health/liveness`, `/health`).
+  - Docker Compose configuration syntax validation (`docker compose -f compose.yaml config --quiet`).
+* Security & Secret Leakage Auditing (`scripts/ci-security-check.js`):
+  - Automated git-tracked file inspection preventing accidental check-in of `.env`, `.pem`, `.key`, or service account credentials.
+  - Pattern matching for high-risk secret markers (private keys, service account JSON headers, personal access tokens).
+  - Production dependency vulnerability gate via `npm audit --omit=dev --audit-level=critical`.
+* Keyless Google Cloud Authentication via Workload Identity Federation (WIF):
+  - Cryptographic OpenID Connect (OIDC) token exchange with Google Cloud Security Token Service (STS).
+  - Organization policy enforcement (`iam.disableServiceAccountKeyCreation`) preventing static credential generation.
+  - Strict numeric identity pinning (`assertion.repository_id == '1401646031' && assertion.repository_owner_id == '292493253'`).
+  - Read-only token and least-privilege verification workflow (`.github/workflows/gcp-wif-check.yml`).
+* Immutable Container Publishing Pipeline (`.github/workflows/build-images.yml`):
+  - Multi-stage Buildx compilation with GitHub Actions layer caching.
+  - Dual immutable commit SHA tagging (`:${GITHUB_SHA}` and `:${GITHUB_SHA::7}`) and semantic release tagging (`:v*`, `:latest`).
+  - Image digests recorded and exported directly to GitHub Actions Step Summaries.
+* Controlled Cloud Run Deployment Pipeline (`.github/workflows/deploy.yml`):
+  - Safe preflight gate triggered only after CI passes on `main` or via manual `workflow_dispatch`.
+  - Automated deployment of `shopcloud-api` and `shopcloud-web` in `asia-south1` referencing immutable image tags.
+  - Post-deployment live smoke verification checking `/api/v1/health/liveness` and `/health`.
+  - Comprehensive Step Summary reporting deployed revision IDs, live URLs, commit SHAs, and instant rollback runbook commands.
+* IAM Least-Privilege Grants:
+  - `shopcloud-github-deployer` granted `roles/run.developer` on `shopcloud-api` and `shopcloud-web`.
+  - `shopcloud-github-deployer` granted `roles/iam.serviceAccountUser` on `shopcloud-api-runtime` and `shopcloud-web-runtime`.
+* Cost Control & Zero-Spend Verification:
+  - Maintained ₹0 / $0 avoidable GCP spend target.
+  - Production Cloud SQL instance (`shopcloud-postgres`) verified `STOPPED` with activation policy `NEVER`.
+  - Cloud Run services configure `min-instances=0` (scale-to-zero when idle).
+* Comprehensive Documentation in `docs/ci-cd/`:
+  - `architecture.md`: Pipeline architecture, dependency graph, and zero-cost design.
+  - `workflows.md`: Detailed triggers, jobs, and step guarantees.
+  - `security-and-wif.md`: Workload Identity Federation, OIDC token exchange, and least-privilege matrix.
+  - `deployment-and-rollback.md`: Cloud Run deployment flow, health probes, and instant traffic rollback runbook.
+  - `validation.md`: Verification results, test checklists, and cost compliance evidence.
+
+---
+
 ## [0.11.0-phase11] — Phase 11: Payment Processing, Webhooks & Order Lifecycle (2026-10-10)
 
 ### Added

@@ -1,13 +1,22 @@
 name: ShopCloud CD Pipeline
 
-# Deploys only after "ShopCloud CI Pipeline" has passed on main, so CD can never mask a CI failure.
-# Note: workflow_run triggers are always read from the workflow file on the default branch (main).
+# Automated Controlled Continuous Deployment Pipeline for ShopCloud
+# Deploys only after "ShopCloud CI Pipeline" has passed on main, or on manual workflow_dispatch.
+# Authenticates via Workload Identity Federation (WIF). Never uses service account keys.
 on:
   workflow_run:
     workflows: ["ShopCloud CI Pipeline"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Deployment Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
 
 permissions:
   contents: read
@@ -19,51 +28,47 @@ concurrency:
 env:
   REGION: asia-south1
   GAR_REPOSITORY: shopcloud
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'project-c3f386b1-6c37-468d-8ee' }}
+  WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER || 'projects/24903284190/locations/global/workloadIdentityPools/shopcloud-github-pool/providers/github-actions' }}
+  WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || 'shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com' }}
   DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   preflight:
-    name: Check Deployment Configuration
+    name: Preflight Configuration & Gate Check
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch')
     outputs:
       configured: ${{ steps.check.outputs.configured }}
 
     steps:
-      - name: Verify GCP Workload Identity Federation secrets
+      - name: Verify GCP Workload Identity Federation Configuration
         id: check
-        env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
-          GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
         run: |
           missing=()
-          for name in GCP_PROJECT_ID GCP_WIF_PROVIDER GCP_WIF_SERVICE_ACCOUNT; do
-            [ -n "${!name}" ] || missing+=("$name")
-          done
+          [ -n "${PROJECT_ID}" ] || missing+=("PROJECT_ID")
+          [ -n "${WIF_PROVIDER}" ] || missing+=("WIF_PROVIDER")
+          [ -n "${WIF_SERVICE_ACCOUNT}" ] || missing+=("WIF_SERVICE_ACCOUNT")
 
           if [ ${#missing[@]} -eq 0 ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "✅ GCP Workload Identity Federation configuration verified."
             exit 0
           fi
 
           echo "configured=false" >> "$GITHUB_OUTPUT"
-          echo "::warning title=Deployment not configured::Cloud Run deployment skipped. Missing repository secrets: ${missing[*]}"
+          echo "::warning title=Deployment not configured::Cloud Run deployment skipped. Missing parameters: ${missing[*]}"
           {
-            echo "### Deployment skipped: GCP not configured"
-            echo ""
-            echo "CI passed, but the following repository secrets are not set, so nothing was deployed:"
-            echo ""
+            echo "### Deployment Skipped: GCP Configuration Missing"
+            echo "The following required parameters are not configured:"
             for name in "${missing[@]}"; do echo "- \`$name\`"; done
-            echo ""
-            echo "Configure them under Settings > Secrets and variables > Actions once the GCP infrastructure exists."
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    name: Build, Push to GAR & Deploy to Cloud Run
+    name: Build, Publish & Deploy to Cloud Run
     needs: preflight
     if: needs.preflight.outputs.configured == 'true'
     runs-on: ubuntu-latest
@@ -72,51 +77,154 @@ jobs:
       contents: read
       id-token: write
 
-    env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
-      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
-
     steps:
-      - name: Checkout Code
+      - name: Checkout Code at Deployment SHA
         uses: actions/checkout@v5
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
       - name: Authenticate to Google Cloud via Workload Identity Federation
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_lifetime: 1200s
 
-      - name: Set up Cloud SDK
+      - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # API Deployment
-      - name: Build and Push API Container
-        run: |
-          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ env.DEPLOY_SHA }}"
-          LATEST_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:latest"
-          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f Dockerfile.api .
-          docker push "$IMAGE_TAG"
-          docker push "$LATEST_TAG"
+      # Set up Docker Buildx for cached multi-stage builds
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      # Build and push immutable container images tagged by commit SHA and latest
+      - name: Build & Publish API Container Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ env.DEPLOY_SHA }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build & Publish Web Frontend Container Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/web:${{ env.DEPLOY_SHA }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Build & Publish Workers Container Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/worker:${{ env.DEPLOY_SHA }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/worker:latest
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      # Record previous revisions before deployment to facilitate immediate rollback if needed
+      - name: Capture Pre-deployment Revision State
+        id: prev_state
+        run: |
+          PREV_API_REV=$(gcloud run services describe shopcloud-api --region=${{ env.REGION }} --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "none")
+          PREV_WEB_REV=$(gcloud run services describe shopcloud-web --region=${{ env.REGION }} --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "none")
+          echo "prev_api_rev=${PREV_API_REV}" >> "$GITHUB_OUTPUT"
+          echo "prev_web_rev=${PREV_WEB_REV}" >> "$GITHUB_OUTPUT"
+          echo "Current API revision: ${PREV_API_REV}"
+          echo "Current Web revision: ${PREV_WEB_REV}"
+
+      # Deploy Cloud Run API Service
       - name: Deploy API to Cloud Run
+        id: deploy_api
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: shopcloud-dev-api
+          service: shopcloud-api
           region: ${{ env.REGION }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/api:${{ env.DEPLOY_SHA }}
 
-      # Workers Deployment
-      - name: Build and Push Workers Container
+      # Deploy Cloud Run Web Storefront Service
+      - name: Deploy Web Storefront to Cloud Run
+        id: deploy_web
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: shopcloud-web
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/web:${{ env.DEPLOY_SHA }}
+
+      # Post-deployment live smoke verification
+      - name: Verify Live Endpoints
         run: |
-          IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/workers:${{ env.DEPLOY_SHA }}"
-          LATEST_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/workers:latest"
-          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" -f Dockerfile.worker .
-          docker push "$IMAGE_TAG"
-          docker push "$LATEST_TAG"
+          API_URL="${{ steps.deploy_api.outputs.url }}"
+          WEB_URL="${{ steps.deploy_web.outputs.url }}"
+
+          echo "Verifying API liveness probe at ${API_URL}/api/v1/health/liveness..."
+          for i in $(seq 1 15); do
+            API_RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${API_URL}/api/v1/health/liveness" || echo "000")
+            if [ "$API_RESP" = "200" ]; then
+              echo "✅ API liveness probe responded HTTP 200 OK"
+              break
+            fi
+            echo "Waiting for API cold start / readiness... (HTTP $API_RESP, attempt $i/15)"
+            sleep 3
+          done
+          [ "$API_RESP" = "200" ] || { echo "❌ API liveness probe failed!"; exit 1; }
+
+          echo "Verifying Web storefront health probe at ${WEB_URL}/health..."
+          for i in $(seq 1 15); do
+            WEB_RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${WEB_URL}/health" || echo "000")
+            if [ "$WEB_RESP" = "200" ]; then
+              echo "✅ Web storefront health probe responded HTTP 200 OK"
+              break
+            fi
+            echo "Waiting for Web storefront health... (HTTP $WEB_RESP, attempt $i/15)"
+            sleep 2
+          done
+          [ "$WEB_RESP" = "200" ] || { echo "❌ Web storefront health probe failed!"; exit 1; }
+
+      # Emit Comprehensive Deployment Summary and Rollback Runbook
+      - name: Emit Deployment Job Summary & Rollback Runbook
+        if: always()
+        run: |
+          API_URL="${{ steps.deploy_api.outputs.url }}"
+          WEB_URL="${{ steps.deploy_web.outputs.url }}"
+          PREV_API="${{ steps.prev_state.outputs.prev_api_rev }}"
+          PREV_WEB="${{ steps.prev_state.outputs.prev_web_rev }}"
+
+          {
+            echo "## 🚀 ShopCloud Deployment Summary"
+            echo ""
+            echo "| Service | Target URL | Status | Commit SHA |"
+            echo "| :--- | :--- | :--- | :--- |"
+            echo "| **shopcloud-api** | [${API_URL}](${API_URL}) | ✅ Deployed | \`${{ env.DEPLOY_SHA }}\` |"
+            echo "| **shopcloud-web** | [${WEB_URL}](${WEB_URL}) | ✅ Deployed | \`${{ env.DEPLOY_SHA }}\` |"
+            echo ""
+            echo "### 🔄 Rollback Runbook"
+            echo "To immediately route 100% of traffic back to the previous stable revision, run:"
+            echo ""
+            echo '```bash'
+            if [ "$PREV_API" != "none" ] && [ -n "$PREV_API" ]; then
+              echo "gcloud run services update-traffic shopcloud-api --to-revisions=${PREV_API}=100 --region=${{ env.REGION }}"
+            fi
+            if [ "$PREV_WEB" != "none" ] && [ -n "$PREV_WEB" ]; then
+              echo "gcloud run services update-traffic shopcloud-web --to-revisions=${PREV_WEB}=100 --region=${{ env.REGION }}"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

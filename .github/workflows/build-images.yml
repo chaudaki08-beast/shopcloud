@@ -1,30 +1,33 @@
 name: Build & Push Images
 
-# Builds the Cloud Run images and pushes them to Artifact Registry through Workload Identity Federation
-# (no keys). It does NOT deploy: Cloud Run deployment is manual in Phase 7; Phase 12 automates it.
-# Runs on manual dispatch, and when this file or an image recipe changes (so a branch can produce images
-# before it is on main, and a Dockerfile fix always yields fresh images).
+# Builds production container images for ShopCloud and publishes them to Artifact Registry
+# via Workload Identity Federation (WIF). Never uses long-lived keys.
+# Triggered on manual dispatch, pushes to main/develop, or release tags.
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '.github/workflows/build-images.yml'
-      - 'Dockerfile.api'
-      - 'Dockerfile.web'
+    branches: [main, develop]
+    tags: ['v*']
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: build-images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: asia-south1-docker.pkg.dev
   REPOSITORY: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud
+  WIF_PROVIDER: projects/24903284190/locations/global/workloadIdentityPools/shopcloud-github-pool/providers/github-actions
+  WIF_SERVICE_ACCOUNT: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
 
 jobs:
   build:
-    name: Build & Push (${{ matrix.service }})
+    name: Build & Publish (${{ matrix.service }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +36,8 @@ jobs:
             dockerfile: Dockerfile.api
           - service: web
             dockerfile: Dockerfile.web
-          # worker: deferred until Pub/Sub push delivery exists (Phase 10)
+          - service: worker
+            dockerfile: Dockerfile.worker
 
     steps:
       - name: Checkout Code
@@ -43,8 +47,8 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/24903284190/locations/global/workloadIdentityPools/shopcloud-github-pool/providers/github-actions
-          service_account: shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
           token_format: access_token
           access_token_lifetime: 1200s
 
@@ -58,13 +62,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Compute image tags
+      - name: Compute Immutable & Semantic Image Tags
         id: tags
         run: |
           short_sha="${GITHUB_SHA::7}"
-          echo "list=${REPOSITORY}/${{ matrix.service }}:phase7-${short_sha},${REPOSITORY}/${{ matrix.service }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          tags="${REPOSITORY}/${{ matrix.service }}:${GITHUB_SHA},${REPOSITORY}/${{ matrix.service }}:${short_sha}"
 
-      - name: Build and push ${{ matrix.dockerfile }}
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tags="${tags},${REPOSITORY}/${{ matrix.service }}:${{ github.ref_name }}"
+          fi
+
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            tags="${tags},${REPOSITORY}/${{ matrix.service }}:latest"
+          fi
+
+          echo "list=${tags}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push ${{ matrix.dockerfile }} to Artifact Registry
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -76,16 +91,21 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      - name: Record image digest
+      - name: Record Image Digest & Publish Summary
         run: |
-          image="${REPOSITORY}/${{ matrix.service }}@${{ steps.build.outputs.digest }}"
-          echo "Pushed ${image}"
+          image_digest="${REPOSITORY}/${{ matrix.service }}@${{ steps.build.outputs.digest }}"
+          echo "Successfully pushed ${image_digest}"
           {
-            echo "### ${{ matrix.service }}"
-            echo "- commit: \`${GITHUB_SHA}\`"
-            echo "- tags: \`${{ steps.tags.outputs.list }}\`"
-            echo "- digest: \`${image}\`"
+            echo "### 📦 Published Image: \`${{ matrix.service }}\`"
+            echo "- **Commit**: \`${GITHUB_SHA}\` (\`${{ steps.tags.outputs.short_sha }}\`)"
+            echo "- **Digest**: \`${image_digest}\`"
+            echo "- **Pushed Tags**:"
+            IFS=',' read -ra ADDR <<< "${{ steps.tags.outputs.list }}"
+            for tag in "${ADDR[@]}"; do
+              echo "  - \`$tag\`"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
