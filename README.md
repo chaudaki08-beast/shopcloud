@@ -16,7 +16,7 @@
 > * **Payment Processing**: Provider abstraction (Test/Razorpay/Stripe), HMAC-SHA256 webhook verification, durable idempotency, and ACID compensation ([docs/payments/README.md](docs/payments/README.md))
 > * **Event Broker**: Google Cloud Pub/Sub (`shopcloud-domain-events`, with ordering & dead-letter policies)
 > * **Object Storage**: Bucket `gs://shopcloud-media-24903284190` (`asia-south1`, UBLA, Public Access Prevention enforced)
-> * **Cloud Architecture Documentation**: [docs/payments/README.md](docs/payments/README.md) · [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
+> * **Cloud Architecture Documentation**: [docs/ci-cd/architecture.md](docs/ci-cd/architecture.md) · [docs/payments/README.md](docs/payments/README.md) · [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
 
 ---
 
@@ -79,10 +79,10 @@ flowchart TD
 | **Phase 7** | Cloud Run Deployment ([docs](docs/gcp/cloud-run.md)) | ✅ **COMPLETE** | `v0.7.0-phase7` |
 | **Phase 8** | Cloud SQL Integration ([docs](docs/gcp/cloud-sql.md)) | ✅ **COMPLETE** | `v0.8.0-phase8` |
 | **Phase 9** | Cloud Storage & Signed URLs ([docs](docs/gcp/cloud-storage.md)) | ✅ **COMPLETE** | `v0.9.0-phase9` |
-| **Phase 10** | Pub/Sub Event Pipelines | 🟡 **UP NEXT** | `v1.0.0-phase10` |
-| **Phase 11** | Payments & Webhooks | ⚪ NOT STARTED | `v1.1.0-phase11` |
-| **Phase 12** | CI/CD with Workload Identity Federation | ⚪ NOT STARTED | `v1.2.0-phase12` |
-| **Phase 13** | Terraform Infrastructure as Code | ⚪ NOT STARTED | `v1.3.0-phase13` |
+| **Phase 10** | Pub/Sub Event Pipelines ([docs](docs/gcp/pubsub.md)) | ✅ **COMPLETE** | `v0.10.0-phase10` |
+| **Phase 11** | Payments & Webhooks ([docs](docs/payments/README.md)) | ✅ **COMPLETE** | `v0.11.0-phase11` |
+| **Phase 12** | CI/CD with Workload Identity Federation ([docs](docs/ci-cd/architecture.md)) | ✅ **COMPLETE** | `v1.2.0-phase12` |
+| **Phase 13** | Terraform Infrastructure as Code | 🟡 **UP NEXT** | `v1.3.0-phase13` |
 | **Phase 14** | Cloud Monitoring & Alerting | ⚪ NOT STARTED | `v1.4.0-phase14` |
 | **Phase 15** | Load Testing (k6) | ⚪ NOT STARTED | `v1.5.0-phase15` |
 | **Phase 16** | Reliability & Disaster Recovery | ⚪ NOT STARTED | `v1.6.0-phase16` |

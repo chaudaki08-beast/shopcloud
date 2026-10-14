@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "typecheck": "tsc --noEmit",
     "dev": "nest start --watch",
     "start": "node dist/main",
     "test": "dotenv -e ../../.env -- jest"
