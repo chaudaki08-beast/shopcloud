@@ -1,7 +1,14 @@
-project_id          = "your-gcp-project-id"
-project_name        = "shopcloud"
-environment         = "dev"
-region              = "asia-south1"
-db_password         = "ChangeMeSecurePassword123!"
-api_container_image = "asia-south1-docker.pkg.dev/your-gcp-project-id/shopcloud/api:latest"
-alert_email         = "your-email@example.com"
+# ==============================================================================
+# ShopCloud Terraform Variables Example — Development Environment
+# Safe configuration example containing placeholder values only.
+# Never commit real secrets or production credentials to git.
+# ==============================================================================
+
+project_id                 = "project-c3f386b1-6c37-468d-8ee"
+project_number             = "24903284190"
+project_name               = "shopcloud"
+environment                = "dev"
+region                     = "asia-south1"
+zone                       = "asia-south1-c"
+github_repository_id       = "1401646031"
+github_repository_owner_id = "292493253"

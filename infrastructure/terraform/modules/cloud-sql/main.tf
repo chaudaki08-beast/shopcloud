@@ -1,52 +1,75 @@
-resource "google_sql_database_instance" "postgres" {
-  name             = "${var.project_name}-${var.environment}-db"
-  database_version = "POSTGRES_16"
-  region           = var.region
+# ------------------------------------------------------------------------------
+# ShopCloud Google Cloud SQL PostgreSQL Module
+# Enterprise Edition PostgreSQL 16 with zero-cost activation policy (NEVER / STOPPED)
+# ------------------------------------------------------------------------------
 
-  depends_on = [var.vpc_connection_dependency]
+resource "google_sql_database_instance" "postgres" {
+  name             = var.instance_name
+  database_version = var.database_version
+  region           = var.region
+  project          = var.project_id
 
   settings {
     tier              = var.tier
-    availability_type = var.environment == "prod" ? "REGIONAL" : "ZONAL"
-    disk_size         = 20
+    edition           = "ENTERPRISE"
+    activation_policy = var.activation_policy
+    availability_type = "ZONAL"
+    disk_size         = 10
     disk_type         = "PD_SSD"
+    disk_autoresize   = true
 
     ip_configuration {
-      ipv4_enabled    = false
-      private_network = var.network_id
+      ipv4_enabled = true
+      ssl_mode     = "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
     }
 
     backup_configuration {
       enabled                        = true
-      start_time                     = "03:00"
-      point_in_time_recovery_enabled = true
+      start_time                     = "20:00"
       transaction_log_retention_days = 7
+
+      backup_retention_settings {
+        retained_backups = 7
+        retention_unit   = "COUNT"
+      }
     }
 
-    database_flags {
-      name  = "max_connections"
-      value = "100"
+    location_preference {
+      zone = var.zone
+    }
+
+    maintenance_window {
+      day  = 7
+      hour = 21
     }
   }
 
-  deletion_protection = var.environment == "prod" ? true : false
+  deletion_protection = var.deletion_protection
+
+  lifecycle {
+    # Prevent destructive replacements and accidental reboots from minor settings drifts
+    prevent_destroy = true
+    ignore_changes = [
+      settings[0].disk_size,
+    ]
+  }
 }
 
-resource "google_sql_database" "database" {
+resource "google_sql_database" "shopcloud" {
   name     = var.database_name
   instance = google_sql_database_instance.postgres.name
+  project  = var.project_id
 }
 
-resource "google_sql_user" "users" {
-  name     = var.db_user
-  instance = google_sql_database_instance.postgres.name
-  password = var.db_password
+# Least-privilege IAM: Cloud SQL Client role granted to API and Worker runtimes
+resource "google_project_iam_member" "api_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${var.api_sa_email}"
 }
 
-output "instance_connection_name" {
-  value = google_sql_database_instance.postgres.connection_name
-}
-
-output "private_ip_address" {
-  value = google_sql_database_instance.postgres.private_ip_address
+resource "google_project_iam_member" "worker_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${var.worker_sa_email}"
 }
