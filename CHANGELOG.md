@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0-phase13] — Phase 13: Terraform Infrastructure as Code (IaC) (2026-10-14)
+
+### Added
+* Modular Infrastructure as Code Architecture (`infrastructure/terraform/`):
+  - Upgraded Terraform baseline to `>= 1.5.0` with official Google Provider `hashicorp/google ~> 5.30`.
+  - Refactored monolithic stubs into focused, single-responsibility domain modules:
+    * `modules/iam`: Manages service accounts (`shopcloud-api-runtime`, `shopcloud-web-runtime`, `shopcloud-worker-runtime`, `shopcloud-github-deployer`), Workload Identity Federation (WIF) pool `shopcloud-github-pool`, GitHub Actions OIDC provider, and least-privilege role bindings.
+    * `modules/artifact-registry`: Manages standard Docker repository `shopcloud` in `asia-south1` and deployer image publishing IAM permissions.
+    * `modules/secret-manager`: Manages secret metadata containers (`shopcloud-dev-database-url`, `shopcloud-dev-jwt-access-secret`, `shopcloud-dev-jwt-refresh-secret`) and runtime accessor IAM bindings without storing raw secret payloads in state.
+    * `modules/storage`: Manages durable media GCS bucket (`shopcloud-media-24903284190`) with Uniform Bucket-Level Access (UBLA), Public Access Prevention (PAP), 7-day multipart upload abort lifecycle, and API runtime objectUser IAM permissions.
+    * `modules/pubsub`: Manages domain events topic (`shopcloud-domain-events`), worker dead-letter topics (`shopcloud-inventory-dlq`, `shopcloud-notification-dlq`), worker push/pull subscriptions with ordering and exponential backoff retry policies, and Pub/Sub service agent DLQ publishing bindings.
+    * `modules/cloud-sql`: Manages Cloud SQL PostgreSQL 16 database instance (`shopcloud-postgres`) strictly pinned to `activation_policy = "NEVER"`, logical database `shopcloud`, and client IAM bindings.
+    * `modules/cloud-run`: Manages Cloud Run v2 services (`shopcloud-api` and `shopcloud-web`) with scale-to-zero autoscaling, native Cloud SQL unix domain socket mounting, secret environment variables, and public HTTP invoker bindings.
+  - Environment orchestration in `environments/dev/` providing root wiring, typed variables, outputs, and sanitized `terraform.tfvars.example`.
+* Terraform CI Quality & Security Gate (`.github/workflows/ci.yml`):
+  - Integrated automated Terraform check job in GitHub Actions executing `terraform fmt -check -recursive` and `terraform validate` across environments.
+  - Hardened CI security checker (`scripts/ci-security-check.js`) to reject tracked `.tfstate`, `.tfstate.backup`, `.tfplan`, and unexampled `.tfvars` files.
+* Zero-Cost Policy Enforcement ($0 / ₹0 avoidable GCP spend):
+  - Pinned Cloud SQL instance activation policy to `NEVER` to prevent compute billing.
+  - Leveraged native Cloud SQL Unix domain socket sidecar proxy (`run.googleapis.com/cloudsql-instances`) to eliminate costly Serverless VPC Access Connectors (~$10–$18/month saved).
+  - Maintained scale-to-zero (`min_instance_count = 0`) across all Cloud Run services.
+* Comprehensive Documentation Suite in `docs/terraform/`:
+  - `architecture.md`: IaC structure, module dependency graph, live GCP mapping, and zero-cost design principles.
+  - `import-and-state.md`: Resource-to-address mapping, step-by-step import runbook, approval-gated GCS backend bootstrap procedure, and state disaster recovery.
+  - `operations-and-rollback.md`: Standard operational lifecycle, mandatory human approval gates, drift detection runbook, and rollbacks.
+  - `cost-and-security.md`: Zero-cost checklist, Secret Manager payload protection architecture, least-privilege IAM matrix, and Trivy static security analysis findings.
+
+---
+
 ## [1.2.0-phase12] — Phase 12: CI/CD Automation, Security Gates & Controlled Deployments (2026-10-14)
 
 ### Added
