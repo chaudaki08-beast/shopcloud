@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "db:generate": "dotenv -e ../../.env -- prisma generate --schema=prisma/schema.prisma",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev --schema=prisma/schema.prisma",
     "db:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy --schema=prisma/schema.prisma",

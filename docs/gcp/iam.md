@@ -17,7 +17,7 @@
 | `shopcloud-api-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run API runtime — serving `shopcloud-api` | none at project level; `secretAccessor` on `shopcloud-dev-jwt-access-secret`, `shopcloud-dev-jwt-refresh-secret`, `shopcloud-dev-database-url` | 0 |
 | `shopcloud-web-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` (Phase 7) | Cloud Run web (nginx) runtime — serving `shopcloud-web` | **none** | 0 |
 | `shopcloud-worker-runtime@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | Cloud Run worker runtime (Phase 10) | none at project level; `secretAccessor` on `shopcloud-dev-database-url` | 0 |
-| `shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | GitHub Actions deployment identity | none at project level; `artifactregistry.writer` on repository `shopcloud`; impersonable only via WIF (below) | 0 |
+| `shopcloud-github-deployer@project-c3f386b1-6c37-468d-8ee.iam.gserviceaccount.com` | GitHub Actions deployment identity | none at project level; `artifactregistry.writer` on repository `shopcloud`; `roles/run.developer` on `shopcloud-api` and `shopcloud-web`; `roles/iam.serviceAccountUser` on `shopcloud-api-runtime` and `shopcloud-web-runtime`; impersonable only via WIF (below) | 0 |
 
 `24903284190-compute@developer.gserviceaccount.com` (Compute Engine default) was created automatically when Cloud Run was
 enabled in Phase 7. The org policy `iam.automaticIamGrantsForDefaultServiceAccounts` is enforced, so it has **no roles**,
@@ -42,8 +42,8 @@ roles/artifactregistry.serviceAgent  serviceAccount:service-24903284190@gcp-sa-a
 | 7 ✅ | `allUsers` | `roles/run.invoker` | `shopcloud-api`, `shopcloud-web` (public endpoints; the app enforces auth) |
 | 7 ✅ | web-runtime (new) | **none** | serves static files and proxies over public HTTPS |
 | 7 — not needed | api-runtime, web-runtime | ~~`logging.logWriter`, `monitoring.metricWriter`, `cloudtrace.agent`~~ | Cloud Run ships stdout/stderr and request logs through the platform (verified). Grant in Phase 14 only if the app calls these APIs directly |
-| 12 | github-deployer | `roles/run.developer` | the ShopCloud Cloud Run services |
-| 12 | github-deployer | `roles/iam.serviceAccountUser` | **on** api-runtime and web-runtime only (to deploy as them) |
+| 12 ✅ | github-deployer | `roles/run.developer` | the ShopCloud Cloud Run services (`shopcloud-api`, `shopcloud-web`) |
+| 12 ✅ | github-deployer | `roles/iam.serviceAccountUser` | **on** api-runtime and web-runtime only (to deploy as them) |
 | 8 | api-runtime, worker-runtime | `roles/cloudsql.client` (+ `roles/cloudsql.instanceUser` if IAM DB auth) | project / instance |
 | 9 | api-runtime | `roles/storage.objectAdmin` | media bucket only |
 | 10 | api-runtime | `roles/pubsub.publisher` | each topic it publishes to |
