@@ -45,3 +45,10 @@ variable "github_repository_owner_id" {
   type        = string
   default     = "292493253"
 }
+
+variable "monitoring_notification_channels" {
+  description = "List of Google Cloud Monitoring notification channel IDs (e.g. email, Slack)"
+  type        = list(string)
+  default     = []
+}
+

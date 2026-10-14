@@ -6,6 +6,7 @@ import {
 } from '@shopcloud/contracts';
 import { InventoryWorker } from './inventory-worker';
 import { NotificationWorker } from './notification-worker';
+import { WorkerLogger } from './worker-logger';
 
 /**
  * Normalizes input payload into a standardized EventEnvelope.
@@ -46,8 +47,10 @@ export async function handleEvent(rawInput: any): Promise<void> {
   const envelope = normalizeEnvelope(rawInput);
   const { eventType, eventId, correlationId, aggregateId } = envelope;
 
-  console.log(
-    `[EventRouter] Routing event [${eventType}] (id: ${eventId}, agg: ${aggregateId}, corr: ${correlationId})`,
+  WorkerLogger.info(
+    `Routing event [${eventType}] (id: ${eventId}, agg: ${aggregateId}, corr: ${correlationId})`,
+    'EventRouter',
+    { eventType, eventId, aggregateId, correlationId },
   );
 
   switch (eventType) {
@@ -72,15 +75,19 @@ export async function handleEvent(rawInput: any): Promise<void> {
 
     case EVENT_TYPES.INVENTORY_RESERVED_V1:
     case 'inventory.reserved': {
-      console.log(
-        `[EventRouter] [OBSERVED] Inventory reserved event acknowledged: ${aggregateId}`,
+      WorkerLogger.info(
+        `Inventory reserved event acknowledged: ${aggregateId}`,
+        'EventRouter',
+        { aggregateId, correlationId },
       );
       break;
     }
 
     default:
-      console.warn(
-        `[EventRouter] Unhandled or informative event type [${eventType}]. Skipping dispatch.`,
+      WorkerLogger.warn(
+        `Unhandled or informative event type [${eventType}]. Skipping dispatch.`,
+        'EventRouter',
+        { eventType, correlationId },
       );
       break;
   }

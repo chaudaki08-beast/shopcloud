@@ -16,7 +16,7 @@
 > * **Payment Processing**: Provider abstraction (Test/Razorpay/Stripe), HMAC-SHA256 webhook verification, durable idempotency, and ACID compensation ([docs/payments/README.md](docs/payments/README.md))
 > * **Event Broker**: Google Cloud Pub/Sub (`shopcloud-domain-events`, with ordering & dead-letter policies)
 > * **Object Storage**: Bucket `gs://shopcloud-media-24903284190` (`asia-south1`, UBLA, Public Access Prevention enforced)
-> * **Cloud Architecture Documentation**: [docs/terraform/architecture.md](docs/terraform/architecture.md) · [docs/ci-cd/architecture.md](docs/ci-cd/architecture.md) · [docs/payments/README.md](docs/payments/README.md) · [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
+> * **Cloud Architecture Documentation**: [docs/observability/architecture.md](docs/observability/architecture.md) · [docs/terraform/architecture.md](docs/terraform/architecture.md) · [docs/ci-cd/architecture.md](docs/ci-cd/architecture.md) · [docs/payments/README.md](docs/payments/README.md) · [docs/gcp/pubsub.md](docs/gcp/pubsub.md) · [docs/gcp/event-driven-architecture.md](docs/gcp/event-driven-architecture.md) · [docs/gcp/workers.md](docs/gcp/workers.md) · [docs/gcp/cloud-storage.md](docs/gcp/cloud-storage.md) · [docs/gcp/cloud-sql.md](docs/gcp/cloud-sql.md)
 
 ---
 
@@ -83,8 +83,8 @@ flowchart TD
 | **Phase 11** | Payments & Webhooks ([docs](docs/payments/README.md)) | ✅ **COMPLETE** | `v0.11.0-phase11` |
 | **Phase 12** | CI/CD with Workload Identity Federation ([docs](docs/ci-cd/architecture.md)) | ✅ **COMPLETE** | `v1.2.0-phase12` |
 | **Phase 13** | Terraform Infrastructure as Code ([docs](docs/terraform/architecture.md)) | ✅ **COMPLETE** | `v1.3.0-phase13` |
-| **Phase 14** | Cloud Monitoring & Alerting | 🟡 **UP NEXT** | `v1.4.0-phase14` |
-| **Phase 15** | Load Testing (k6) | ⚪ NOT STARTED | `v1.5.0-phase15` |
+| **Phase 14** | Cloud Monitoring & Alerting ([docs](docs/observability/architecture.md)) | ✅ **COMPLETE** | `v1.4.0-phase14` |
+| **Phase 15** | Load Testing (k6) | 🟡 **UP NEXT** | `v1.5.0-phase15` |
 | **Phase 16** | Reliability & Disaster Recovery | ⚪ NOT STARTED | `v1.6.0-phase16` |
 | **Phase 17** | GKE Workload Migration | ⚪ NOT STARTED | `v1.7.0-phase17` |
 | **Phase 18** | Final Cloud Architecture Audit | ⚪ NOT STARTED | `v2.0.0` |
@@ -142,7 +142,7 @@ shopcloud/
 ├── infrastructure/
 │   ├── terraform/              # Complete Terraform IaC modules for GCP
 │   │   ├── environments/dev/   # Dev environment composition
-│   │   └── modules/            # IAM, Artifact Registry, Secret Manager, Storage, Pub/Sub, Cloud SQL, Cloud Run
+│   │   └── modules/            # IAM, Artifact Registry, Secret Manager, Storage, Pub/Sub, Cloud SQL, Cloud Run, Monitoring
 │   ├── docker/                 # Docker Compose for local PostgreSQL 16 & Pub/Sub emulator
 │   └── k6/                     # Load testing script with latency percentiles
 └── .github/
