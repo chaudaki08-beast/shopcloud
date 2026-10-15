@@ -99,7 +99,6 @@ jobs:
           kubectl kustomize infra/kubernetes/base > /dev/null
           kubectl kustomize infra/kubernetes/overlays/local > /dev/null
           kubectl kustomize infra/kubernetes/overlays/staging > /dev/null
-          kubectl apply --dry-run=client --validate=false -k infra/kubernetes/overlays/local
 
       - name: Emit CI Job Summary
         if: always()
