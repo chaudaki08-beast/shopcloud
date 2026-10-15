@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopcloud-inventory-worker
+  namespace: shopcloud
+spec:
+  template:
+    spec:
+      serviceAccountName: shopcloud-worker-ksa
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopcloud-notification-worker
+  namespace: shopcloud
+spec:
+  template:
+    spec:
+      serviceAccountName: shopcloud-worker-ksa

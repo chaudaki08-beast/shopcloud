@@ -26,7 +26,8 @@
     "test:load:smoke": "k6 run --duration 10s tests/load/scenarios/health.js",
     "test:load:catalog": "k6 run --duration 10s tests/load/scenarios/catalog.js",
     "test:load:events": "k6 run --duration 10s tests/load/scenarios/event-processing.js",
-    "test:load:suite": "k6 run tests/load/index.js"
+    "test:load:suite": "k6 run tests/load/index.js",
+    "test:k8s:validate": "node scripts/validate-k8s-manifests.js"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",

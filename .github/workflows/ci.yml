@@ -93,6 +93,13 @@ jobs:
       - name: Validate k6 Load Testing Suite Structure & Scripts
         run: npm run test:load:validate
 
+      - name: Validate Kubernetes Manifests, Schemas & Security
+        run: |
+          npm run test:k8s:validate
+          kubectl kustomize infra/kubernetes/base > /dev/null
+          kubectl kustomize infra/kubernetes/overlays/local > /dev/null
+          kubectl kustomize infra/kubernetes/overlays/staging > /dev/null
+
       - name: Emit CI Job Summary
         if: always()
         run: |
@@ -106,6 +113,7 @@ jobs:
             echo "- **Typecheck**: \`PASSED\` (Contracts, Database, API, Workers, Web)"
             echo "- **Monorepo Tests**: \`PASSED\`"
             echo "- **Load Testing Scripts**: \`VALIDATED\` (k6 suite static syntax, exports & headers verified)"
+            echo "- **Kubernetes Readiness**: \`VALIDATED\` (PSS Restricted profiles, dry-run client & Kustomize overlays)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   docker:
