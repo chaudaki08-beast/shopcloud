@@ -203,14 +203,15 @@ console.log('\n[5/5] Auditing Secrets for Zero Plaintext Leakage...');
 const secrets = parsedDocs.filter((p) => p.doc && p.doc.kind === 'Secret');
 for (const { file, doc } of secrets) {
   const rawContent = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-  // Check that no real production secrets or private keys are committed
+  const privKeyPattern = new RegExp('-----BEGIN[\\s\\S]*?PRIVATE KEY-----');
+  const saPattern = new RegExp('"' + 'type"\\s*:\\s*"' + 'service_account"');
   check(
     `Secret in ${file} does not contain real RSA/EC private keys`,
-    !rawContent.includes('BEGIN PRIVATE KEY') && !rawContent.includes('BEGIN RSA PRIVATE KEY'),
+    !privKeyPattern.test(rawContent),
   );
   check(
     `Secret in ${file} does not contain real GCP service account JSON`,
-    !rawContent.includes('"type": "service_account"'),
+    !saPattern.test(rawContent),
   );
 }
 
