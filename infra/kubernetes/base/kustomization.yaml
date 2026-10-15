@@ -21,6 +21,7 @@ resources:
   - resource-quota.yaml
   - limit-range.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: shopcloud-platform
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: shopcloud-platform
+      app.kubernetes.io/managed-by: kustomize
