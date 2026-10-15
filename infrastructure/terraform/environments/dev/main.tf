@@ -88,3 +88,14 @@ module "monitoring" {
   notification_channels            = var.monitoring_notification_channels
 }
 
+# 9. Kubernetes Engine Layer (Dormant by default; enable_gke = false)
+module "gke" {
+  source       = "../../modules/gke"
+  enable_gke   = var.enable_gke
+  project_id   = var.project_id
+  region       = var.region
+  cluster_name = "shopcloud-${var.environment}-gke"
+  labels       = local.common_labels
+}
+
+

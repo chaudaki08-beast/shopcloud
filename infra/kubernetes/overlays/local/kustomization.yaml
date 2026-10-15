@@ -1,0 +1,76 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shopcloud
+
+resources:
+  - ../../base
+
+namePrefix: local-
+
+patches:
+  # Downscale replicas to 1 for minimal local resource footprint
+  - target:
+      kind: Deployment
+      name: shopcloud-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: shopcloud-web
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: shopcloud-inventory-worker
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: shopcloud-notification-worker
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+# Image overrides for local container runtime
+images:
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/api
+    newName: shopcloud-api
+    newTag: local
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/web
+    newName: shopcloud-web
+    newTag: local
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/worker
+    newName: shopcloud-worker
+    newTag: local
+
+# Local ConfigMap overrides
+configMapGenerator:
+  - name: shopcloud-config
+    behavior: merge
+    literals:
+      - NODE_ENV=development
+      - GCP_PROJECT_ID=shopcloud-local
+      - PUBSUB_EMULATOR_HOST=localhost:8085
+      - LOG_LEVEL=debug
+
+# Local disposable development secrets
+secretGenerator:
+  - name: shopcloud-secrets
+    behavior: replace
+    literals:
+      - DATABASE_URL=postgresql://shopcloud_local:shopcloud_local@localhost:5432/shopcloud_local?schema=public
+      - JWT_ACCESS_SECRET=local-development-jwt-access-secret-minimum-32-chars-long
+      - JWT_REFRESH_SECRET=local-development-jwt-refresh-secret-minimum-32-chars-long
+      - RAZORPAY_KEY_ID=rzp_test_local
+      - RAZORPAY_KEY_SECRET=local_dummy_secret
+      - RAZORPAY_WEBHOOK_SECRET=local_dummy_whsec
+      - STRIPE_SECRET_KEY=sk_test_local_dummy
+      - STRIPE_WEBHOOK_SECRET=whsec_local_dummy

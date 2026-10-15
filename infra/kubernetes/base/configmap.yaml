@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopcloud-config
+  namespace: shopcloud
+  labels:
+    app.kubernetes.io/name: shopcloud
+    app.kubernetes.io/part-of: shopcloud-platform
+data:
+  NODE_ENV: "production"
+  GCP_PROJECT_ID: "project-c3f386b1-6c37-468d-8ee"
+  GCP_REGION: "asia-south1"
+  GCP_STORAGE_BUCKET: "shopcloud-media-project-c3f386b1-6c37-468d-8ee"
+  PUBSUB_TOPIC_ORDERS: "shopcloud-order-events"
+  PUBSUB_TOPIC_PAYMENTS: "shopcloud-payment-events"
+  PUBSUB_DELIVERY: "pull"
+  CORS_ORIGIN: "*"
+  LOG_LEVEL: "info"
+  # Service ports
+  API_PORT: "3000"
+  WEB_PORT: "8080"
+  WORKER_HEALTH_PORT: "8081"
+  # Web to API reverse-proxy destination
+  API_UPSTREAM: "http://shopcloud-api:3000"

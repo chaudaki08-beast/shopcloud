@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopcloud-api
+  namespace: shopcloud
+spec:
+  template:
+    spec:
+      serviceAccountName: shopcloud-api-ksa
+      containers:
+        # Sidecar container: Cloud SQL Auth Proxy v2
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.2
+          args:
+            # Connect via Workload Identity without hardcoded credentials
+            - "--structured-logs"
+            - "--port=5432"
+            - "--address=127.0.0.1"
+            - "--health-check"
+            - "--http-port=9091"
+            - "--max-sigterm-delay=15s"
+            - "project-c3f386b1-6c37-468d-8ee:asia-south1:shopcloud-postgres"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: 9091
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 9091
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9091
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
