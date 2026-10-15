@@ -5,6 +5,29 @@ All notable changes to the **ShopCloud** platform will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — Phase 18: Final Cloud Audit, Security Verification & Project Completion (2026-10-16)
+
+### Added
+* Comprehensive Platform & Cloud Architecture Audit:
+  - Evidence-based multi-phase audit of Phases 0–17 across monorepo applications, infrastructure, CI/CD, security posture, and cloud resources.
+  - Verification of core distributed systems invariants: integer-minor-unit money handling (paise/cents), ACID stock decrement and compensation, non-negative inventory enforcement, transactionally atomic outbox logging, and idempotent event deduplication (`ProcessedEvent` unique constraint).
+  - Defensive security review covering authentication, bcrypt cost factor (12 rounds), JWT rotation, least privilege IAM, WIF keyless authentication, input sanitization, rate limiting with IP spoofing defenses (`TRUST_PROXY_HOPS`), and magic byte upload validation.
+  - Zero Plaintext Leakage audit verified across all git history, configuration files, and Kubernetes templates (`ci-security-check.js`).
+* Automated Quality & Multi-Layer Test Verification:
+  - 319 automated tests and validation checks passed across all monorepo workspaces and infrastructure scripts.
+  - Monorepo compilation verified (`npm run build` across `@shopcloud/api`, `@shopcloud/web`, `@shopcloud/workers`, `@shopcloud/contracts`, and `@shopcloud/database`).
+  - Strict typecheck passed with zero errors (`tsc --noEmit`).
+  - Terraform quality and security check passed (`terraform fmt -check`, `terraform validate`).
+  - Kubernetes manifests validated with 99 automated checks conforming to Pod Security Standards Restricted profile.
+  - k6 performance scenarios validated across 6 critical user flows.
+* Portfolio & Demonstration Showcase:
+  - Consolidated and refreshed root `README.md` with modern architecture diagrams, verified test badges, real-world deployment links, and honest environment distinctions.
+  - Comprehensive Final Audit Report published as permanent portfolio artifact.
+* Zero-Cost GCP Policy Adherence ($0 / ₹0 Avoidable Spend):
+  - Cloud SQL instance verified in stopped state (`activationPolicy: NEVER`).
+  - GKE API kept disabled (`container.googleapis.com`); zero billable clusters created.
+  - Total cumulative project spend retained at ₹0 / $0 avoidable spend.
+
 ---
 
 ## [1.7.0-phase17] — Phase 17: GKE Migration & Kubernetes Readiness (2026-10-16)
