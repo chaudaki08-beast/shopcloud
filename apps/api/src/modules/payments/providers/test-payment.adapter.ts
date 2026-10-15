@@ -98,10 +98,23 @@ export class TestPaymentAdapter implements PaymentProvider {
       };
     }
 
-    const event = parsed.event as 'PAYMENT_SUCCESS' | 'PAYMENT_FAILED' | 'REFUND_SUCCESS' | 'IGNORED';
+    const rawEvent = parsed.event;
+    let event: 'PAYMENT_SUCCESS' | 'PAYMENT_FAILED' | 'REFUND_SUCCESS' | 'IGNORED' = 'PAYMENT_SUCCESS';
+    if (rawEvent === 'PAYMENT_SUCCESS' || rawEvent === 'payment.succeeded') {
+      event = 'PAYMENT_SUCCESS';
+    } else if (rawEvent === 'PAYMENT_FAILED' || rawEvent === 'payment.failed') {
+      event = 'PAYMENT_FAILED';
+    } else if (rawEvent === 'REFUND_SUCCESS' || rawEvent === 'refund.succeeded') {
+      event = 'REFUND_SUCCESS';
+    } else if (rawEvent === 'IGNORED') {
+      event = 'IGNORED';
+    } else if (rawEvent) {
+      event = rawEvent;
+    }
+
     return {
       isValid: true,
-      event: event || 'PAYMENT_SUCCESS',
+      event,
       providerEventId: parsed.id || `test_evt_${Date.now()}`,
       providerRef: parsed.providerRef || parsed.paymentId || '',
       orderId: parsed.orderId,

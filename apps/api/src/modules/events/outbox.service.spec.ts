@@ -167,4 +167,24 @@ describe('OutboxService', () => {
       }),
     });
   });
+
+  it('should recover stale PROCESSING events back to PENDING status', async () => {
+    (prisma.outboxEvent.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
+
+    const recoveredCount = await outboxService.recoverStaleProcessing(60000);
+    expect(recoveredCount).toBe(3);
+    expect(prisma.outboxEvent.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: 'PROCESSING',
+        updatedAt: {
+          lte: expect.any(Date),
+        },
+      },
+      data: expect.objectContaining({
+        status: 'PENDING',
+        lastError: expect.stringContaining('Recovered from stale PROCESSING state'),
+      }),
+    });
+  });
 });
+

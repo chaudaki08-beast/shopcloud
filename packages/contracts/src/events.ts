@@ -51,6 +51,7 @@ export const EVENT_TYPES = {
   PAYMENT_SUCCEEDED_V1: 'payment.succeeded.v1',
   PAYMENT_FAILED_V1: 'payment.failed.v1',
   PAYMENT_REFUNDED_V1: 'payment.refunded.v1',
+  PAYMENT_RECONCILIATION_REQUIRED_V1: 'payment.reconciliation.required.v1',
 } as const;
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
@@ -206,6 +207,21 @@ export interface PaymentRefundedPayload {
 }
 
 export type PaymentRefundedEvent = PaymentRefundedPayload;
+
+export interface PaymentReconciliationRequiredPayload {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  userId: string;
+  amount: number; // in paise
+  currency: string;
+  provider: string;
+  transactionRef?: string;
+  reason: string; // e.g., 'PAYMENT_RECEIVED_ON_CANCELLED_ORDER' | 'UNKNOWN_GATEWAY_OUTCOME'
+  detectedAt: string;
+}
+
+export type PaymentReconciliationRequiredEvent = PaymentReconciliationRequiredPayload;
 
 // ==========================================
 // Helper functions for Envelope Conversion

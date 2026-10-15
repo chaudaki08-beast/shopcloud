@@ -373,8 +373,71 @@ export class PaymentsService {
             },
           });
 
-          // Transition Order: PAYMENT_PENDING -> CONFIRMED
-          if (order && order.status !== PrismaOrderStatus.CONFIRMED) {
+          // Transition Order: PAYMENT_PENDING -> CONFIRMED, or flag for reconciliation if order was cancelled
+          const isCancelled =
+            order &&
+            (order.status === PrismaOrderStatus.CANCELLED ||
+              order.status === PrismaOrderStatus.REFUNDED);
+
+          if (isCancelled) {
+            this.logger.warn(
+              `[LATE_PAYMENT_WEBHOOK] Received payment capture for cancelled order #${order.orderNumber} (Payment: ${payment.id}). Order remains CANCELLED; emitting reconciliation event.`,
+            );
+
+            // Audit the mismatch
+            await tx.auditLog.create({
+              data: {
+                entity: 'Order',
+                entityId: order.id,
+                action: 'PAYMENT_RECEIVED_ON_CANCELLED_ORDER',
+                metadata: {
+                  paymentId: payment.id,
+                  amount: payment.amount,
+                  provider: providerName,
+                  transactionRef: providerRef,
+                  orderStatus: order.status,
+                },
+              },
+            });
+
+            // Record OutboxEvent: payment.reconciliation.required.v1
+            const reconEventId = `evt-pay-recon-${Date.now()}`;
+            const reconPayload = {
+              paymentId: payment.id,
+              orderId: payment.orderId,
+              orderNumber: order.orderNumber,
+              userId: payment.userId,
+              amount: payment.amount,
+              currency: payment.currency,
+              provider: providerName,
+              transactionRef: providerRef,
+              reason: 'PAYMENT_RECEIVED_ON_CANCELLED_ORDER',
+              detectedAt: new Date().toISOString(),
+            };
+
+            await this.outboxService.recordEvent(tx, {
+              eventId: reconEventId,
+              eventType: EVENT_TYPES.PAYMENT_RECONCILIATION_REQUIRED_V1,
+              eventVersion: 'v1',
+              occurredAt: reconPayload.detectedAt,
+              producer: 'shopcloud-api',
+              correlationId,
+              aggregateType: 'Payment',
+              aggregateId: payment.id,
+              payload: reconPayload,
+            });
+
+            // Record ProcessedEvent marker to prevent endless webhook retries
+            await tx.processedEvent.create({
+              data: {
+                eventId: providerEventId,
+                consumer: consumerName,
+                eventType: event,
+              },
+            });
+
+            return reconEventId;
+          } else if (order && order.status !== PrismaOrderStatus.CONFIRMED) {
             OrderStateMachine.validateTransition(
               order.status as unknown as OrderStatus,
               OrderStatus.CONFIRMED,
