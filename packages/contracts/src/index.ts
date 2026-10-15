@@ -8,5 +8,6 @@ export * from './payment';
 export * from './events';
 export * from './health';
 export * from './logging';
+export * from './resilience';
 
 

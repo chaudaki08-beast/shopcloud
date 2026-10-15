@@ -85,8 +85,8 @@ flowchart TD
 | **Phase 13** | Terraform Infrastructure as Code ([docs](docs/terraform/architecture.md)) | ✅ **COMPLETE** | `v1.3.0-phase13` |
 | **Phase 14** | Cloud Monitoring & Alerting ([docs](docs/observability/architecture.md)) | ✅ **COMPLETE** | `v1.4.0-phase14` |
 | **Phase 15** | Load Testing & Capacity Baselines ([docs](docs/performance/test-strategy.md)) | ✅ **COMPLETE** | `v1.5.0-phase15` |
-| **Phase 16** | Reliability & Disaster Recovery | 🟡 **UP NEXT** | `v1.6.0-phase16` |
-| **Phase 17** | GKE Workload Migration | ⚪ NOT STARTED | `v1.7.0-phase17` |
+| **Phase 16** | Reliability, Resilience & Failure Recovery ([docs](docs/reliability/recovery-validation.md)) | ✅ **COMPLETE** | `v1.6.0-phase16` |
+| **Phase 17** | GKE Workload Migration | 🟡 **UP NEXT** | `v1.7.0-phase17` |
 | **Phase 18** | Final Cloud Architecture Audit | ⚪ NOT STARTED | `v2.0.0` |
 
 ---
@@ -150,6 +150,7 @@ shopcloud/
 │       ├── lib/                # SLO thresholds, test data generators, auth helper
 │       └── scenarios/          # Health, Catalog, Cart, Checkout, Lifecycle, Webhook events
 ├── docs/
+│   ├── reliability/            # Failure scenario matrix, recovery runbooks, jitter & retry policy
 │   ├── performance/            # Test strategy, empirical baselines, bottleneck analysis
 │   ├── observability/          # Monitoring dashboards, alert policies, incident runbooks
 │   └── terraform/              # IaC architecture, import guides, operational runbooks

@@ -193,7 +193,13 @@ export class OrdersService {
         }
       } catch (err) {
         rethrowInProduction(err);
-        if (err instanceof BadRequestException) throw err;
+        if (
+          err instanceof BadRequestException ||
+          (err as any)?.status === 400 ||
+          (err as any)?.name === 'BadRequestException'
+        ) {
+          throw err;
+        }
       }
     }
 
