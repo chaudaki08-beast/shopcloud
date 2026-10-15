@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shopcloud
+
+resources:
+  - ../../base
+  - service-accounts.yaml
+
+patches:
+  - path: cloud-sql-proxy-patch.yaml
+  - path: worker-sa-patch.yaml
+
+# Staging overlay retains production-grade tags from Artifact Registry
+images:
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/api
+    newTag: v1.7.0-phase17
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/web
+    newTag: v1.7.0-phase17
+  - name: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/worker
+    newTag: v1.7.0-phase17

@@ -52,3 +52,10 @@ variable "monitoring_notification_channels" {
   default     = []
 }
 
+variable "enable_gke" {
+  description = "Safety gate flag: set to true only when GKE provisioning is explicitly approved. Defaults to false to enforce zero-cost GCP spend policy."
+  type        = bool
+  default     = false
+}
+
+

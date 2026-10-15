@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopcloud-notification-worker
+  namespace: shopcloud
+  labels:
+    app.kubernetes.io/name: shopcloud-notification-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: shopcloud-platform
+    app.kubernetes.io/version: "1.7.0"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shopcloud-notification-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shopcloud-notification-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: shopcloud-platform
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: asia-south1-docker.pkg.dev/project-c3f386b1-6c37-468d-8ee/shopcloud/worker:v1.7.0-phase17
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: shopcloud-config
+                  key: NODE_ENV
+            - name: HEALTH_PORT
+              value: "8081"
+            - name: PUBSUB_DELIVERY
+              value: "pull"
+            - name: PUBSUB_SUBSCRIPTION
+              value: "shopcloud-notification-sub"
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: shopcloud-config
+                  key: GCP_PROJECT_ID
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: shopcloud-config
+                  key: LOG_LEVEL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: shopcloud-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

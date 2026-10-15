@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: shopcloud-api-pdb
+  namespace: shopcloud
+  labels:
+    app.kubernetes.io/name: shopcloud-api
+    app.kubernetes.io/part-of: shopcloud-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shopcloud-api

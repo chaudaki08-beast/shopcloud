@@ -86,8 +86,8 @@ flowchart TD
 | **Phase 14** | Cloud Monitoring & Alerting ([docs](docs/observability/architecture.md)) | ✅ **COMPLETE** | `v1.4.0-phase14` |
 | **Phase 15** | Load Testing & Capacity Baselines ([docs](docs/performance/test-strategy.md)) | ✅ **COMPLETE** | `v1.5.0-phase15` |
 | **Phase 16** | Reliability, Resilience & Failure Recovery ([docs](docs/reliability/recovery-validation.md)) | ✅ **COMPLETE** | `v1.6.0-phase16` |
-| **Phase 17** | GKE Workload Migration | 🟡 **UP NEXT** | `v1.7.0-phase17` |
-| **Phase 18** | Final Cloud Architecture Audit | ⚪ NOT STARTED | `v2.0.0` |
+| **Phase 17** | GKE Migration & Kubernetes Readiness ([docs](docs/kubernetes/architecture.md)) | ✅ **COMPLETE** | `v1.7.0-phase17` |
+| **Phase 18** | Final Cloud Architecture Audit | 🟡 **UP NEXT** | `v2.0.0` |
 
 ---
 
@@ -139,10 +139,12 @@ shopcloud/
 ├── packages/
 │   ├── contracts/              # Shared TypeScript DTOs, Enums, and CloudEvent schemas
 │   └── database/               # PostgreSQL Prisma schema, connection singleton, and seed script
+├── infra/
+│   └── kubernetes/             # Declarative Kubernetes manifests (Base + Local & Staging Kustomize overlays)
 ├── infrastructure/
 │   ├── terraform/              # Complete Terraform IaC modules for GCP
 │   │   ├── environments/dev/   # Dev environment composition
-│   │   └── modules/            # IAM, Artifact Registry, Secret Manager, Storage, Pub/Sub, Cloud SQL, Cloud Run, Monitoring
+│   │   └── modules/            # IAM, Artifact Registry, Secret Manager, Storage, Pub/Sub, Cloud SQL, Cloud Run, GKE, Monitoring
 │   └── docker/                 # Docker Compose for local PostgreSQL 16 & Pub/Sub emulator
 ├── tests/
 │   └── load/                   # Grafana k6 reproducible load test suite
@@ -150,6 +152,7 @@ shopcloud/
 │       ├── lib/                # SLO thresholds, test data generators, auth helper
 │       └── scenarios/          # Health, Catalog, Cart, Checkout, Lifecycle, Webhook events
 ├── docs/
+│   ├── kubernetes/             # Architecture, security, local setup, migration runbook, cost analysis
 │   ├── reliability/            # Failure scenario matrix, recovery runbooks, jitter & retry policy
 │   ├── performance/            # Test strategy, empirical baselines, bottleneck analysis
 │   ├── observability/          # Monitoring dashboards, alert policies, incident runbooks

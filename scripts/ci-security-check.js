@@ -61,8 +61,8 @@ try {
     if (file.endsWith('.lock') || file.endsWith('.png') || file.endsWith('.ico') || file.endsWith('.jpg') || file.endsWith('.md')) {
       continue;
     }
-    // Skip scripts/ci-security-check.js itself to avoid self-match on regex definitions
-    if (file === 'scripts/ci-security-check.js') {
+    // Skip verification and security check scripts to avoid self-match on regex definitions
+    if (file === 'scripts/ci-security-check.js' || file === 'scripts/validate-k8s-manifests.js') {
       continue;
     }
 

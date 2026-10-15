@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0-phase17] — Phase 17: GKE Migration & Kubernetes Readiness (2026-10-16)
+
+### Added
+* Declarative Kubernetes Infrastructure (`infra/kubernetes/`):
+  - Base manifests complying with Pod Security Standards (PSS) **Restricted** profile (`namespace.yaml`).
+  - Core ConfigMap (`configmap.yaml`) and clean Secret schema template (`secret.yaml`) with zero plaintext or committed production credentials.
+  - Workload Deployments with non-root security context (`runAsUser: 1000`), dropped Linux capabilities (`ALL`), read-only root filesystems, and rolling update strategies:
+    * `shopcloud-api`: 2 replicas, probes (`/api/v1/health/liveness`, `/readiness`), resource requests/limits (100m/500m CPU, 128Mi/384Mi RAM), terminationGracePeriodSeconds: 30.
+    * `shopcloud-web`: 2 replicas, probes (`/health`), resource requests/limits (50m/200m CPU, 32Mi/64Mi RAM), Nginx temp cache mounts.
+    * `shopcloud-inventory-worker`: 1 replica, Pub/Sub pull mode (`shopcloud-inventory-sub`), health probes (port 8081).
+    * `shopcloud-notification-worker`: 1 replica, Pub/Sub pull mode (`shopcloud-notification-sub`), health probes (port 8081).
+  - Internal ClusterIP Services for API (port 3000) and Web (port 80).
+  - Ingress configuration routing `/api` to API and `/` to Web frontend (`ingress.yaml`).
+  - Autoscaling & Reliability:
+    * HorizontalPodAutoscalers (`hpa-api.yaml`, `hpa-web.yaml`) with stabilization windows and bounded scale limits.
+    * PodDisruptionBudgets (`pdb-api.yaml`, `pdb-web.yaml`) enforcing `minAvailable: 1`.
+    * Namespace ResourceQuota (`resource-quota.yaml`) and LimitRange (`limit-range.yaml`).
+* Kustomize Environments Hierarchy:
+  - `infra/kubernetes/overlays/local/`: Single-replica minimal dev overlay with mock configs, local image tags, and disposable local credentials.
+  - `infra/kubernetes/overlays/staging/`: GKE staging overlay configuring Workload Identity ServiceAccounts (`shopcloud-api-ksa`, `shopcloud-worker-ksa`) and Cloud SQL Auth Proxy v2 sidecar container for private database access.
+* Kubernetes Static Schema & Security Linter (`scripts/validate-k8s-manifests.js`):
+  - 99 automated checks verifying YAML syntax, Kustomize resource references, PSS restricted security contexts, resource requests/limits, probes, and secret cleanliness.
+  - Added npm script `test:k8s:validate`.
+* CI/CD Quality Automation (`.github/workflows/ci.yml`):
+  - Integrated `Validate Kubernetes Manifests, Schemas & Security` gate running static linter, `kubectl kustomize` for base and overlays, and `kubectl apply --dry-run=client`.
+* Terraform GKE Module (`infrastructure/terraform/modules/gke/`):
+  - Modular GKE Autopilot resource definition with Workload Identity and private cluster networking.
+  - Guarded by `enable_gke = false` by default, ensuring 0 resources are planned or provisioned in compliance with the zero-cost GCP policy.
+* Comprehensive Kubernetes Documentation Suite (`docs/kubernetes/`):
+  - `architecture.md`: Target workload topology, network flows, and service mesh readiness.
+  - `local-development.md`: Local cluster setup guide (Minikube / Kind), troubleshooting, and honest reporting of local tool status.
+  - `security.md`: PSS Restricted profile, Workload Identity Federation for GKE, and Secret Manager integration.
+  - `migration-and-rollback.md`: Staged canary migration plan from Cloud Run to GKE, instant rollback mechanisms, and Go/No-Go criteria.
+  - `cost-analysis.md`: Detailed official pricing analysis comparing Cloud Run ($0/mo idle) vs GKE Autopilot ($59/mo) vs GKE Standard ($74/mo), recommending retention of Cloud Run as primary deployment.
+* Zero-Cost GCP Policy Compliance ($0 / ₹0 avoidable spend):
+  - Cloud SQL instance kept in stopped state (`NEVER`).
+  - GKE API kept disabled (`container.googleapis.com`); no live cluster created or billed. Total spend: ₹0 / $0.
+
+---
+
 ## [1.6.0-phase16] — Phase 16: Reliability, Resilience & Failure Recovery (2026-10-16)
 
 ### Added
