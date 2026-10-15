@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0-phase16] — Phase 16: Reliability, Resilience & Failure Recovery (2026-10-16)
+
+### Added
+* Distributed Resilience & Retry Utilities (`@shopcloud/contracts`):
+  - `withRetry` bounded execution engine with per-attempt timeouts, `isIdempotent` guard, and customizable `onRetry` hooks.
+  - Backoff calculation with Full Jitter and Equal Jitter (`calculateBackoff`) to eliminate thundering herd retry storms.
+  - Granular transient error classification (`isTransientError`) covering network error codes (`ECONNRESET`, `ETIMEDOUT`, `ENOTFOUND`), transient HTTP statuses (429, 500, 502, 503, 504), and PostgreSQL deadlock/serialization codes (40P01, 40001).
+  - Production-gated safe `FaultInjector` supporting synthetic latency, transient errors, and permanent faults (strictly disabled in `production`).
+  - Unit test suite `packages/contracts/test/resilience.test.ts` (16 tests, 100% pass).
+* Transactional Outbox Crash Recovery & Jittered Backoff (`apps/api/src/modules/events/outbox.service.ts`):
+  - Added `recoverStaleProcessing` sweeper to recover orphaned events left in `PROCESSING` status (> 5 minutes) caused by container restarts.
+  - Upgraded publication retry backoff from deterministic to full jitter.
+  - Added simulated fault injection hook for testing Pub/Sub failure scenarios.
+  - Unit test suite `apps/api/src/modules/events/outbox.service.spec.ts` (6 tests, 100% pass).
+* Concurrency, Inventory & State Machine Invariants (`apps/api/src/modules/orders/`):
+  - Strengthened `createOrder` stock reservation to prevent overselling on concurrent checkout races.
+  - Re-throw `BadRequestException` across database transaction catch blocks to prevent fallback masking of invalid requests.
+  - Unit test suite `apps/api/src/modules/orders/orders-resilience.spec.ts` (6 tests, 100% pass).
+* Payments & Webhook Resilience (`apps/api/src/modules/payments/`):
+  - Handled late payment webhook capture on cancelled orders: preserves terminal `CANCELLED` state, writes audit log (`PAYMENT_RECEIVED_ON_CANCELLED_ORDER`), records outbox reconciliation event (`payment.reconciliation.required.v1`), records processed event marker, and returns HTTP 200 without failing or triggering endless gateway retries.
+  - Normalized webhook event mappings in `test-payment.adapter.ts`.
+  - Added event definition `PAYMENT_RECONCILIATION_REQUIRED_V1` and payload in `@shopcloud/contracts`.
+  - Unit test suite `apps/api/src/modules/payments/payments-resilience.spec.ts` (5 tests, 100% pass).
+* Worker Lifecycle & Graceful Draining (`apps/workers/`):
+  - Implemented `WorkerLifecycle` class tracking in-flight asynchronous tasks.
+  - Configured SIGTERM/SIGINT shutdown handler with 10-second bounded draining, returning HTTP 503 on `/healthz` during draining to shed incoming Cloud Run traffic.
+  - Unit test suite `apps/workers/test/worker-resilience.test.ts` (4 tests, 100% pass).
+* Comprehensive Reliability Runbooks Suite (`docs/reliability/`):
+  - `failure-matrix.md`: 12 cataloged failure scenarios across database, outbox, workers, payments, and network layers.
+  - `retry-and-timeout-policy.md`: Error taxonomy, jitter models, and timeout guidelines.
+  - `event-recovery.md`: Transactional outbox recovery, stale sweeper mechanics, and consumer idempotency ledger.
+  - `payment-reconciliation.md`: Late webhook resolution, operator procedures, and refund compensation.
+  - `worker-recovery.md`: Graceful shutdown, in-flight draining, poison message isolation, and DLQ operations.
+  - `fault-injection.md`: Safe non-production chaos engineering harness.
+  - `recovery-validation.md`: Empirical test verification summary, RTO/RPO targets, and cost compliance.
+* Zero-Cost GCP Policy Compliance ($0 / ₹0 avoidable spend):
+  - Cloud SQL instance kept in stopped state (`NEVER`).
+  - Total Phase 16 spend: ₹0 / $0.
+
+---
+
 ## [1.5.0-phase15] — Phase 15: Load Testing, Performance Baselines & Capacity Analysis (2026-10-15)
 
 ### Added

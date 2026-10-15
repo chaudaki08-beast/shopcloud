@@ -13,6 +13,7 @@ import {
   resolveHttpPort,
   resolvePushAuth,
 } from './runtime-config';
+import { WorkerLifecycle } from './worker-lifecycle';
 
 /** Cloud Run allows 10 s between SIGTERM and SIGKILL; leave headroom. */
 const SHUTDOWN_TIMEOUT_MS = 8000;
@@ -56,6 +57,14 @@ async function handlePush(
   res: http.ServerResponse,
   auth: PushAuthConfig | null,
 ): Promise<void> {
+  if (WorkerLifecycle.isShuttingDown()) {
+    // 503 Service Unavailable signals Pub/Sub to backoff and re-route
+    WorkerLogger.warn('Worker is draining; rejecting push message with 503', 'WorkerPush');
+    res.writeHead(503, { 'Retry-After': '5' });
+    res.end();
+    return;
+  }
+
   if (auth && !(await verifyPushToken(req, auth))) {
     WorkerLogger.warn('Unauthorized push delivery attempt rejected', 'WorkerPush');
     res.writeHead(401);
@@ -76,6 +85,7 @@ async function handlePush(
   }
 
   const { messageId } = decoded;
+  WorkerLifecycle.incrementInFlight();
   try {
     WorkerLogger.info(`Received push message ID: ${messageId}`, 'WorkerPush', { messageId });
     await handleEvent(decoded.event);
@@ -87,6 +97,8 @@ async function handlePush(
     // Non-2xx makes Pub/Sub redeliver with backoff (and dead-letter after max attempts)
     res.writeHead(500);
     res.end();
+  } finally {
+    WorkerLifecycle.decrementInFlight();
   }
 }
 
@@ -100,12 +112,15 @@ async function bootstrapWorkers() {
   const httpPort = resolveHttpPort();
   const httpServer = http.createServer((req, res) => {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/liveness' || req.url === '/')) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      const isDraining = WorkerLifecycle.isShuttingDown();
+      const statusCode = isDraining ? 503 : 200;
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          status: 'UP',
+          status: isDraining ? 'DRAINING' : 'UP',
           service: 'shopcloud-workers',
           delivery: deliveryMode,
+          inFlight: WorkerLifecycle.getInFlightCount(),
           timestamp: new Date().toISOString(),
         }),
       );
@@ -142,6 +157,13 @@ async function bootstrapWorkers() {
       subscription = pubsub.subscription(subscriptionName);
 
       subscription.on('message', async (message) => {
+        if (WorkerLifecycle.isShuttingDown()) {
+          // NACK so another worker instance can pick it up immediately
+          message.nack();
+          return;
+        }
+
+        WorkerLifecycle.incrementInFlight();
         WorkerLogger.info(`Received pull message ID: ${message.id}`, 'WorkerPull', { messageId: message.id });
         try {
           const payload: CloudEventEnvelope<any> = JSON.parse(message.data.toString());
@@ -150,6 +172,8 @@ async function bootstrapWorkers() {
         } catch (err) {
           WorkerLogger.error(`Error processing message ${message.id}`, err, 'WorkerPull', { messageId: message.id });
           message.nack();
+        } finally {
+          WorkerLifecycle.decrementInFlight();
         }
       });
 
@@ -164,22 +188,49 @@ async function bootstrapWorkers() {
     );
   }
 
-  // Graceful shutdown: stop intake, release Pub/Sub and database connections, exit before SIGKILL
-  let shuttingDown = false;
+  // Graceful shutdown: stop intake, wait for in-flight tasks to drain, release Pub/Sub and DB, exit before SIGKILL
   const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    WorkerLogger.info(`Received ${signal}, shutting down workers gracefully...`, 'WorkerShutdown');
+    if (WorkerLifecycle.isShuttingDown()) return;
+    WorkerLifecycle.setShuttingDown(true);
+    WorkerLogger.info(
+      `Received ${signal}, beginning graceful drain of workers (in-flight: ${WorkerLifecycle.getInFlightCount()})...`,
+      'WorkerShutdown',
+    );
 
     const forceExit = setTimeout(() => {
-      WorkerLogger.error('Graceful shutdown timed out; exiting', undefined, 'WorkerShutdown');
+      WorkerLogger.error(
+        `Graceful shutdown timed out; forcing exit with ${WorkerLifecycle.getInFlightCount()} in-flight tasks remaining`,
+        undefined,
+        'WorkerShutdown',
+      );
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS);
     forceExit.unref();
 
     try {
+      // 1. Stop accepting new connections
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+
+      // 2. Pause/close pull subscription if active
       if (subscription) await subscription.close();
+
+      // 3. Drain active tasks (poll every 100ms for up to 6 seconds)
+      const drainStart = Date.now();
+      const MAX_DRAIN_WAIT_MS = 6000;
+      while (WorkerLifecycle.getInFlightCount() > 0 && Date.now() - drainStart < MAX_DRAIN_WAIT_MS) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      if (WorkerLifecycle.getInFlightCount() > 0) {
+        WorkerLogger.warn(
+          `Drain timeout reached; proceeding with shutdown with ${WorkerLifecycle.getInFlightCount()} tasks still in flight`,
+          'WorkerShutdown',
+        );
+      } else {
+        WorkerLogger.info('All in-flight tasks completed cleanly.', 'WorkerShutdown');
+      }
+
+      // 4. Disconnect database connections
       await prisma.$disconnect();
       process.exit(0);
     } catch (err) {
@@ -192,3 +243,4 @@ async function bootstrapWorkers() {
 }
 
 bootstrapWorkers();
+

@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { prisma, OutboxEvent, Prisma } from '@shopcloud/database';
-import { EventEnvelope } from '@shopcloud/contracts';
+import { EventEnvelope, calculateBackoff, FaultInjector } from '@shopcloud/contracts';
 import { EventsService } from './events.service';
 import { useDatabase } from '../../db-status';
 
@@ -13,6 +13,7 @@ const MAX_PUBLISH_ATTEMPTS = 5;
 const BASE_RETRY_BACKOFF_MS = 1000;
 const MAX_RETRY_BACKOFF_MS = 60000;
 const POLLING_INTERVAL_MS = 5000;
+const STALE_PROCESSING_THRESHOLD_MS = 60000; // 1 minute
 
 @Injectable()
 export class OutboxService implements OnModuleInit, OnModuleDestroy {
@@ -115,6 +116,10 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
+      if (FaultInjector.shouldInject('simulatePubSubFailure')) {
+        throw new Error('SIMULATED_FAULT: Pub/Sub unavailable (fault injection)');
+      }
+
       await this.eventsService.publishEnvelope(envelope);
 
       await prisma.outboxEvent.update({
@@ -147,10 +152,13 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
           },
         });
       } else {
-        const backoffMs = Math.min(
-          MAX_RETRY_BACKOFF_MS,
-          BASE_RETRY_BACKOFF_MS * Math.pow(2, attempts),
-        );
+        // Exponential backoff with full jitter to avoid retry storms
+        const backoffMs = calculateBackoff(attempts, {
+          baseDelayMs: BASE_RETRY_BACKOFF_MS,
+          maxDelayMs: MAX_RETRY_BACKOFF_MS,
+          backoffFactor: 2,
+          jitter: 'full',
+        });
         const nextAvailableAt = new Date(Date.now() + backoffMs);
 
         this.logger.warn(
@@ -173,6 +181,40 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Recovers events stuck in PROCESSING state due to container crash or network partition.
+   */
+  async recoverStaleProcessing(staleThresholdMs = STALE_PROCESSING_THRESHOLD_MS): Promise<number> {
+    if (!(await useDatabase())) return 0;
+    const thresholdDate = new Date(Date.now() - staleThresholdMs);
+
+    try {
+      const recovered = await prisma.outboxEvent.updateMany({
+        where: {
+          status: 'PROCESSING',
+          updatedAt: {
+            lte: thresholdDate,
+          },
+        },
+        data: {
+          status: 'PENDING',
+          availableAt: new Date(),
+          lastError: 'Recovered from stale PROCESSING state (potential container restart)',
+        },
+      });
+
+      if (recovered.count > 0) {
+        this.logger.warn(
+          `[Outbox] Recovered ${recovered.count} stale PROCESSING events back to PENDING status.`,
+        );
+      }
+      return recovered.count;
+    } catch (err) {
+      this.logger.error(`[Outbox] Failed to recover stale events: ${(err as Error).message}`);
+      return 0;
+    }
+  }
+
+  /**
    * Sweeps pending outbox events and publishes them sequentially or concurrently.
    */
   async processPendingOutbox(batchSize = 20): Promise<number> {
@@ -183,6 +225,10 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     let publishedCount = 0;
 
     try {
+      // 1. First recover any events orphaned in PROCESSING state
+      await this.recoverStaleProcessing();
+
+      // 2. Fetch and dispatch ready PENDING events
       const pendingEvents = await prisma.outboxEvent.findMany({
         where: {
           status: 'PENDING',
@@ -211,3 +257,4 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     return publishedCount;
   }
 }
+
